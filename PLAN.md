@@ -69,6 +69,25 @@ Build a system where an LLM generates robot descriptions (URDF), validates them,
 
 ---
 
+## Phase 6: Motor Control, Replay & Stress Testing
+**Goal:** Make robots move, watch them in action, and test robustness across terrains.
+
+| Milestone | Deliverable | Files |
+|-----------|-------------|-------|
+| **6.1 Motor Control** | Sinusoidal position control on all movable joints during simulation, with per-joint phase offsets for gait-like motion | `src/simulate.py` |
+| **6.2 Trajectory Recording** | Record base pose + joint states at 30fps during simulation for replay | `src/simulate.py` |
+| **6.3 Backend API** | `/api/simulate` accepts `enable_motors` and `record_trajectory`; new `/api/stress-test` runs all 4 terrains | `web/app.py` |
+| **6.4 Frontend Replay** | "Simulate & Replay" button records trajectory then animates URDF model with Play/Pause/Stop and scrubber | `web/static/app.js`, `web/static/style.css`, `web/templates/index.html` |
+| **6.5 Stress Test UI** | "Stress Test" button runs all terrains, displays per-terrain scorecard with avg score | `web/static/app.js`, `web/static/style.css`, `web/templates/index.html` |
+
+### Design Decisions
+1. **Sinusoidal gait** — Simple but effective: each joint gets `A·sin(2π·f·t + φ)` where φ is staggered per joint. Respects joint limits.
+2. **30fps recording** — Every 8th physics step (240Hz sim). Balances data size vs. smoothness.
+3. **Client-side replay** — Trajectory applied to Three.js URDF model via `setJointValue()`. No server-side video rendering needed.
+4. **Stress test** — `stress_test_urdf()` runs simulation on all 4 terrains sequentially, computes per-terrain scores and average.
+
+---
+
 ## Project Structure
 ```
 TreeHackNow/
