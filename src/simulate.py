@@ -4,6 +4,7 @@ Usage: python -m src.simulate output/robot.urdf [--terrain flat|uneven|stairs|sl
 """
 
 import logging
+import math
 import os
 import random
 import sys
@@ -21,6 +22,7 @@ except ImportError:
 # Headless by default for CI/automation
 GUI = os.environ.get("PYBULLET_GUI", "0") == "1"
 SIM_DURATION = 5.0  # seconds
+SANITY_CHECK_DURATION = 0.5  # seconds — quick spawn-and-check
 
 TERRAIN_MODES = ("flat", "uneven", "stairs", "slope")
 

@@ -32,6 +32,18 @@ const API = {
   robot: (id) => fetch(`/api/robot/${id}`).then((r) => r.json()),
   deleteRobot: (id) =>
     fetch(`/api/robot/${id}`, { method: "DELETE" }).then((r) => r.json()),
+
+  leaderboard: (terrainMode) => {
+    const params = terrainMode ? `?terrain_mode=${terrainMode}` : "";
+    return fetch(`/api/leaderboard${params}`).then((r) => r.json());
+  },
+
+  submitScore: (robotId, terrainMode) =>
+    fetch("/api/leaderboard/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ robot_id: robotId, terrain_mode: terrainMode }),
+    }).then((r) => r.json()),
 };
 
 let selectedId = null;
@@ -58,11 +70,13 @@ function setLoading(loading) {
     document.getElementById("btn-simulate").disabled = true;
     document.getElementById("btn-download").disabled = true;
     document.getElementById("btn-view-source").disabled = true;
+    document.getElementById("btn-submit-score").disabled = true;
   } else {
     updateRefineButton();
     updateSimulateButton();
     updateDownloadButton();
     updateViewSourceButton();
+    updateSubmitButton();
   }
 }
 
@@ -82,6 +96,10 @@ function updateDownloadButton() {
 
 function updateViewSourceButton() {
   document.getElementById("btn-view-source").disabled = !selectedId;
+}
+
+function updateSubmitButton() {
+  document.getElementById("btn-submit-score").disabled = !selectedId;
 }
 
 function updateRobotCount(count) {
@@ -135,6 +153,7 @@ function renderHistory(history) {
           updateSimulateButton();
           updateDownloadButton();
           updateViewSourceButton();
+          updateSubmitButton();
         }
         const { history: h } = await API.history();
         renderHistory(h);
@@ -161,8 +180,11 @@ function selectRobot(id) {
   updateSimulateButton();
   updateDownloadButton();
   updateViewSourceButton();
-  // Hide source panel when switching robots
+  updateSubmitButton();
+  // Hide source/score panels when switching robots
   document.getElementById("source-panel").style.display = "none";
+  document.getElementById("score-display").style.display = "none";
+  document.getElementById("sim-metrics").style.display = "none";
   loadRobotForPreview(id);
 }
 
@@ -319,6 +341,7 @@ async function doSimulate() {
       toast(res.error || "Simulation failed", "error");
     }
     renderSimMetrics(res.metrics, res.success);
+    renderScoreDisplay(res.score);
   } catch (e) {
     toast("Error: " + e.message, "error");
   } finally {
@@ -433,12 +456,167 @@ function doViewSource() {
   }
 }
 
+function scoreColor(score) {
+  if (score >= 90) return "#22c55e";
+  if (score >= 75) return "#4ade80";
+  if (score >= 60) return "#facc15";
+  if (score >= 40) return "#fb923c";
+  return "#ef4444";
+}
+
+function scoreLabelClass(label) {
+  return (label || "unstable").toLowerCase();
+}
+
+function renderScoreDisplay(score) {
+  const el = document.getElementById("score-display");
+  if (!score) {
+    el.style.display = "none";
+    return;
+  }
+
+  const color = scoreColor(score.final_score);
+  const labelClass = scoreLabelClass(score.label);
+
+  el.innerHTML = `
+    <div class="score-big">
+      <span class="score-number" style="color: ${color}">${score.final_score}</span>
+      <span class="score-label-text" style="color: ${color}">${score.label}</span>
+    </div>
+    <div class="score-breakdown">
+      <div class="score-component">
+        <span class="sc-label">Stability</span>
+        <div class="sc-bar"><div class="sc-bar-fill" style="width: ${score.stability_score}%; background: ${scoreColor(score.stability_score)}"></div></div>
+        <span class="sc-value">${score.stability_score}</span>
+      </div>
+      <div class="score-component">
+        <span class="sc-label">Uprightness</span>
+        <div class="sc-bar"><div class="sc-bar-fill" style="width: ${score.uprightness_score}%; background: ${scoreColor(score.uprightness_score)}"></div></div>
+        <span class="sc-value">${score.uprightness_score}</span>
+      </div>
+      <div class="score-component">
+        <span class="sc-label">Grounding</span>
+        <div class="sc-bar"><div class="sc-bar-fill" style="width: ${score.grounding_score}%; background: ${scoreColor(score.grounding_score)}"></div></div>
+        <span class="sc-value">${score.grounding_score}</span>
+      </div>
+      <div class="score-component">
+        <span class="sc-label">Terrain</span>
+        <span class="sc-value">${score.terrain_mode} (${score.terrain_multiplier}x)</span>
+      </div>
+    </div>
+  `;
+  el.style.display = "flex";
+}
+
+async function loadLeaderboard() {
+  const filter = document.getElementById("lb-terrain-filter").value;
+  try {
+    const { leaderboard } = await API.leaderboard(filter);
+    renderLeaderboard(leaderboard);
+  } catch (e) {
+    console.warn("Could not load leaderboard:", e);
+  }
+}
+
+function renderLeaderboard(entries) {
+  const el = document.getElementById("leaderboard-list");
+  if (!entries || entries.length === 0) {
+    el.innerHTML = '<p class="leaderboard-empty">No scores yet. Simulate a robot and submit to leaderboard!</p>';
+    return;
+  }
+
+  el.innerHTML = entries
+    .map((e, i) => {
+      const rank = i + 1;
+      const rankClass = rank === 1 ? "gold" : rank === 2 ? "silver" : rank === 3 ? "bronze" : "";
+      const labelClass = scoreLabelClass(e.label);
+      return `
+        <div class="lb-entry" data-robot-id="${e.robot_id}">
+          <span class="lb-rank ${rankClass}">#${rank}</span>
+          <div class="lb-info">
+            <div class="lb-prompt">${escapeHtml(e.prompt)}</div>
+            <div class="lb-terrain">${e.terrain_mode}</div>
+          </div>
+          <span class="lb-score-badge ${labelClass}">${e.final_score}</span>
+        </div>
+      `;
+    })
+    .join("");
+
+  el.querySelectorAll(".lb-entry").forEach((entry) => {
+    entry.addEventListener("click", () => {
+      const robotId = entry.dataset.robotId;
+      if (robotId) {
+        // Switch to history tab and select the robot
+        switchSidebarTab("history");
+        selectRobot(robotId);
+      }
+    });
+  });
+}
+
+async function doSubmitScore() {
+  if (!selectedId) {
+    toast("Select a robot from history first", "error");
+    return;
+  }
+
+  const terrainMode = document.getElementById("terrain-mode").value;
+  const btn = document.getElementById("btn-submit-score");
+  btn.disabled = true;
+  btn.textContent = "Submitting…";
+
+  try {
+    const res = await API.submitScore(selectedId, terrainMode);
+    if (res.success) {
+      toast(`Score ${res.entry.final_score} submitted to leaderboard!`);
+      renderScoreDisplay(res.score);
+      loadLeaderboard();
+    } else {
+      toast(res.error || "Submission failed", "error");
+    }
+  } catch (e) {
+    toast("Error: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Submit to Leaderboard";
+    updateSubmitButton();
+  }
+}
+
+function switchSidebarTab(tabName) {
+  document.querySelectorAll(".sidebar-tab").forEach((t) => {
+    t.classList.toggle("active", t.dataset.tab === tabName);
+  });
+  document.querySelectorAll(".sidebar-tab-content").forEach((c) => {
+    c.style.display = "none";
+    c.classList.remove("active");
+  });
+  const target = document.getElementById(`tab-${tabName}`);
+  if (target) {
+    target.style.display = "block";
+    target.classList.add("active");
+  }
+  if (tabName === "leaderboard") {
+    loadLeaderboard();
+  }
+}
+
 async function init() {
   document.getElementById("btn-generate").addEventListener("click", doGenerate);
   document.getElementById("btn-refine").addEventListener("click", doRefine);
   document.getElementById("btn-simulate").addEventListener("click", doSimulate);
   document.getElementById("btn-download").addEventListener("click", doDownload);
   document.getElementById("btn-view-source").addEventListener("click", doViewSource);
+  document.getElementById("btn-submit-score").addEventListener("click", doSubmitScore);
+
+  // Sidebar tabs
+  document.querySelectorAll(".sidebar-tab").forEach((tab) => {
+    tab.addEventListener("click", () => switchSidebarTab(tab.dataset.tab));
+  });
+
+  // Leaderboard terrain filter
+  document.getElementById("lb-terrain-filter").addEventListener("change", loadLeaderboard);
 
   document.querySelectorAll(".example-chip").forEach((chip) => {
     chip.addEventListener("click", () => {
