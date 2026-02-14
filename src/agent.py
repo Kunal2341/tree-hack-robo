@@ -2,6 +2,7 @@
 Phase 3: Intelligent loop — feed simulator errors back to LLM, retry with max_retries.
 Phase 4: Chain-of-thought for multi-legged robots.
 Feature: Iterative refinement — modify existing URDF with follow-up prompts.
+Feature: RAG-augmented generation — retrieve relevant URDF snippets for context.
 """
 
 import logging
@@ -21,6 +22,16 @@ REFINE_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "refine_prompt.t
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
 
 MAX_RETRIES = 5
+
+
+def _get_rag_context(prompt: str) -> str:
+    """Retrieve RAG context for a prompt, failing gracefully."""
+    try:
+        from src.rag import build_rag_context
+        return build_rag_context(prompt, top_k=2)
+    except Exception as e:
+        logger.warning("RAG retrieval failed: %s", e)
+        return ""
 
 
 def load_system_prompt() -> str:
@@ -76,7 +87,15 @@ def run_agent(
     system = load_system_prompt()
 
     multi_leg, num_legs = is_multi_leg_request(prompt)
-    current_prompt = build_leg_prompt(prompt, num_legs) if (multi_leg and num_legs > 0) else prompt
+    base_prompt = build_leg_prompt(prompt, num_legs) if (multi_leg and num_legs > 0) else prompt
+
+    # RAG: augment first attempt with retrieved URDF snippet context
+    rag_context = _get_rag_context(prompt)
+    if rag_context:
+        current_prompt = f"{rag_context}\n\n{base_prompt}"
+        logger.info("RAG: Augmented agent prompt with retrieved snippets")
+    else:
+        current_prompt = base_prompt
 
     for attempt in range(MAX_RETRIES):
         logger.info("Agent attempt %d/%d for prompt: %s", attempt + 1, MAX_RETRIES, prompt[:60])

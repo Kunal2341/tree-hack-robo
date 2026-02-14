@@ -1,11 +1,14 @@
 """
 Web UI for TreeHackNow — prompt input, history, 3D preview, iterative refinement.
+Supports: URDF generation, MJCF/SDF conversion, RAG-enhanced generation, Image-to-URDF.
 """
 
 import json
 import os
 import time
 import uuid
+import base64
+import tempfile
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
@@ -17,8 +20,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.agent import run_agent, run_agent_refine
 from src.simulate import simulate_urdf, stress_test_urdf, physics_sanity_check, generate_feedback_suggestions, TERRAIN_MODES
 from src.score import compute_score, score_label
+from src.convert import urdf_to_mjcf, urdf_to_sdf, generate_mjcf, generate_sdf
+from src.vision import image_to_urdf, image_to_urdf_two_stage, analyze_robot_image
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
+
+# Max upload size: 10MB
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
 HISTORY_PATH = Path(__file__).parent.parent / "output" / "history.json"
 LEADERBOARD_PATH = Path(__file__).parent.parent / "output" / "leaderboard.json"
@@ -440,13 +448,235 @@ def api_leaderboard_submit():
     return jsonify({"success": True, "entry": lb_entry, "score": score_data})
 
 
+# ---------------------------------------------------------------------------
+# MJCF / SDF Conversion Endpoints
+# ---------------------------------------------------------------------------
+
+@app.route("/api/convert/mjcf", methods=["POST"])
+def api_convert_mjcf():
+    """Convert a URDF to MuJoCo MJCF format."""
+    data = request.get_json() or {}
+    robot_id = data.get("robot_id")
+    urdf_str = data.get("urdf")
+
+    if not urdf_str and robot_id and robot_id in _history:
+        urdf_str = _history[robot_id]["urdf"]
+
+    if not urdf_str:
+        return jsonify({"error": "robot_id or urdf is required"}), 400
+
+    try:
+        mjcf = urdf_to_mjcf(urdf_str)
+        return jsonify({"success": True, "mjcf": mjcf, "format": "mjcf"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/convert/sdf", methods=["POST"])
+def api_convert_sdf():
+    """Convert a URDF to Gazebo SDF format."""
+    data = request.get_json() or {}
+    robot_id = data.get("robot_id")
+    urdf_str = data.get("urdf")
+
+    if not urdf_str and robot_id and robot_id in _history:
+        urdf_str = _history[robot_id]["urdf"]
+
+    if not urdf_str:
+        return jsonify({"error": "robot_id or urdf is required"}), 400
+
+    try:
+        sdf = urdf_to_sdf(urdf_str)
+        return jsonify({"success": True, "sdf": sdf, "format": "sdf"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/generate/mjcf", methods=["POST"])
+def api_generate_mjcf():
+    """Generate MJCF directly from natural language."""
+    _ensure_api_key()
+    data = request.get_json() or {}
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return jsonify({"error": "prompt is required"}), 400
+
+    try:
+        mjcf = generate_mjcf(prompt)
+        return jsonify({"success": True, "mjcf": mjcf, "format": "mjcf", "prompt": prompt})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/generate/sdf", methods=["POST"])
+def api_generate_sdf():
+    """Generate SDF directly from natural language."""
+    _ensure_api_key()
+    data = request.get_json() or {}
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return jsonify({"error": "prompt is required"}), 400
+
+    try:
+        sdf = generate_sdf(prompt)
+        return jsonify({"success": True, "sdf": sdf, "format": "sdf", "prompt": prompt})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Image-to-URDF Endpoints
+# ---------------------------------------------------------------------------
+
+@app.route("/api/image-to-urdf", methods=["POST"])
+def api_image_to_urdf():
+    """
+    Generate URDF from an uploaded robot image (sketch, diagram, photo).
+
+    Accepts either:
+    - multipart/form-data with 'image' file field
+    - JSON with 'image_base64' (base64-encoded image data)
+    - JSON with 'image_url' (URL to an image)
+
+    Optional fields: 'additional_prompt', 'mode' ("direct" or "two_stage")
+    """
+    _ensure_api_key()
+
+    additional_prompt = ""
+    mode = "direct"
+    image_input = None
+
+    if request.content_type and "multipart/form-data" in request.content_type:
+        # File upload
+        file = request.files.get("image")
+        if not file:
+            return jsonify({"error": "image file is required"}), 400
+
+        additional_prompt = request.form.get("additional_prompt", "")
+        mode = request.form.get("mode", "direct")
+
+        # Save to temp file
+        suffix = os.path.splitext(file.filename)[1] or ".png"
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        file.save(tmp.name)
+        tmp.close()
+        image_input = tmp.name
+    else:
+        # JSON body
+        data = request.get_json() or {}
+        additional_prompt = data.get("additional_prompt", "")
+        mode = data.get("mode", "direct")
+
+        if data.get("image_base64"):
+            image_input = data["image_base64"]
+        elif data.get("image_url"):
+            image_input = data["image_url"]
+        else:
+            return jsonify({"error": "image file, image_base64, or image_url is required"}), 400
+
+    try:
+        if mode == "two_stage":
+            description, urdf = image_to_urdf_two_stage(image_input, additional_prompt)
+            result = {
+                "success": True,
+                "urdf": urdf,
+                "description": description,
+                "mode": "two_stage",
+            }
+        else:
+            urdf = image_to_urdf(image_input, additional_prompt)
+            result = {
+                "success": True,
+                "urdf": urdf,
+                "mode": "direct",
+            }
+
+        # Auto-save to history
+        entry_id = str(uuid.uuid4())
+        prompt_text = f"[Image-to-URDF] {additional_prompt}" if additional_prompt else "[Image-to-URDF]"
+        _history[entry_id] = {
+            "id": entry_id,
+            "prompt": prompt_text,
+            "urdf": urdf,
+            "refined_from": None,
+            "timestamp": time.time(),
+            "source": "image",
+        }
+        _save_history()
+
+        result["id"] = entry_id
+        result["prompt"] = prompt_text
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        # Clean up temp file if we created one
+        if image_input and os.path.exists(image_input) and image_input.startswith(tempfile.gettempdir()):
+            try:
+                os.unlink(image_input)
+            except OSError:
+                pass
+
+
+@app.route("/api/analyze-image", methods=["POST"])
+def api_analyze_image():
+    """
+    Analyze a robot image and return a text description (without generating URDF).
+    Useful for previewing what the vision model sees before generating.
+    """
+    _ensure_api_key()
+
+    image_input = None
+
+    if request.content_type and "multipart/form-data" in request.content_type:
+        file = request.files.get("image")
+        if not file:
+            return jsonify({"error": "image file is required"}), 400
+        suffix = os.path.splitext(file.filename)[1] or ".png"
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        file.save(tmp.name)
+        tmp.close()
+        image_input = tmp.name
+    else:
+        data = request.get_json() or {}
+        if data.get("image_base64"):
+            image_input = data["image_base64"]
+        elif data.get("image_url"):
+            image_input = data["image_url"]
+        else:
+            return jsonify({"error": "image file, image_base64, or image_url is required"}), 400
+
+    try:
+        description = analyze_robot_image(image_input)
+        return jsonify({"success": True, "description": description})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        if image_input and os.path.exists(image_input) and image_input.startswith(tempfile.gettempdir()):
+            try:
+                os.unlink(image_input)
+            except OSError:
+                pass
+
+
 def main():
     _load_history()
     _load_leaderboard()
+
+    # Pre-load RAG index on startup
+    try:
+        from src.rag import get_rag_index
+        idx = get_rag_index()
+        print(f"  RAG: {len(idx.snippets)} URDF snippets indexed")
+    except Exception as e:
+        print(f"  RAG: Failed to load index: {e}")
+
     port = int(os.environ.get("PORT", 5000))
     print(f"TreeHackNow Web UI: http://localhost:{port}")
     print(f"  History: {len(_history)} robots loaded from {HISTORY_PATH}")
     print(f"  Leaderboard: {len(_leaderboard)} entries loaded from {LEADERBOARD_PATH}")
+    print(f"  Features: URDF + MJCF + SDF generation, RAG, Image-to-URDF")
     app.run(host="0.0.0.0", port=port, debug=True)
 
 
