@@ -3,10 +3,13 @@ Phase 2: PyBullet simulation.
 Usage: python -m src.simulate output/robot.urdf [--terrain flat|uneven|stairs|slope]
 """
 
+import logging
 import os
 import random
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 try:
     import pybullet as p
@@ -115,6 +118,8 @@ def simulate_urdf(urdf_path: Path, terrain_mode: str = "flat") -> tuple[bool, st
     if not urdf_path.exists():
         return False, f"File not found: {urdf_path}", None
 
+    logger.info("Simulating %s on %s terrain (%.1fs)", urdf_path.name, terrain_mode, SIM_DURATION)
+
     if GUI:
         physics_client = p.connect(p.GUI)
     else:
@@ -160,10 +165,13 @@ def simulate_urdf(urdf_path: Path, terrain_mode: str = "flat") -> tuple[bool, st
         }
 
         if dist > 50:
+            logger.warning("Robot exploded: moved %.1fm from origin", dist)
             return False, f"Robot exploded: base moved {dist:.1f}m from origin", metrics
 
+        logger.info("Simulation OK — dist=%.2fm, upright=%s", dist, is_upright)
         return True, "", metrics
     except Exception as e:
+        logger.error("Simulation error: %s", e)
         return False, str(e), None
     finally:
         p.disconnect()

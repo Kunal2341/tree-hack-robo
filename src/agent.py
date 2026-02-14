@@ -4,10 +4,13 @@ Phase 4: Chain-of-thought for multi-legged robots.
 Feature: Iterative refinement — modify existing URDF with follow-up prompts.
 """
 
+import logging
 import os
 from pathlib import Path
 
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 from src.generate import extract_urdf_from_response
 from src.validate import validate_all
@@ -76,6 +79,8 @@ def run_agent(
     current_prompt = build_leg_prompt(prompt, num_legs) if (multi_leg and num_legs > 0) else prompt
 
     for attempt in range(MAX_RETRIES):
+        logger.info("Agent attempt %d/%d for prompt: %s", attempt + 1, MAX_RETRIES, prompt[:60])
+
         # Generate
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -90,6 +95,7 @@ def run_agent(
         # Validate
         valid, err = validate_all(urdf)
         if not valid:
+            logger.warning("Validation failed (attempt %d): %s", attempt + 1, err)
             current_prompt = (
                 f"The previous robot failed validation: {err}\n\n"
                 f"Original request: {prompt}\n\n"
@@ -104,16 +110,19 @@ def run_agent(
         success, sim_err, _metrics = simulate_urdf(test_path, terrain_mode=terrain_mode)
 
         if success:
+            logger.info("Agent succeeded on attempt %d", attempt + 1)
             if save_path:
                 save_path.write_text(urdf)
             return True, urdf, "OK"
         else:
+            logger.warning("Simulation failed (attempt %d): %s", attempt + 1, sim_err)
             current_prompt = (
                 f"The previous robot failed simulation: {sim_err}\n\n"
                 f"Original request: {prompt}\n\n"
                 "Fix the URDF (check link positions, joint limits, effort) and output ONLY valid XML."
             )
 
+    logger.error("Agent exhausted all %d retries for: %s", MAX_RETRIES, prompt[:60])
     return False, "", f"Failed after {MAX_RETRIES} retries. Human help needed."
 
 
