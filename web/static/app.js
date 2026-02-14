@@ -388,6 +388,13 @@ async function init() {
   document.getElementById("btn-download").addEventListener("click", doDownload);
   document.getElementById("btn-view-source").addEventListener("click", doViewSource);
 
+  document.querySelectorAll(".example-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      document.getElementById("prompt").value = chip.dataset.prompt;
+      document.getElementById("prompt").focus();
+    });
+  });
+
   document.getElementById("prompt").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
