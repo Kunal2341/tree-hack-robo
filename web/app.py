@@ -16,13 +16,18 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.agent import run_agent, run_agent_refine
 from src.simulate import simulate_urdf, TERRAIN_MODES
+from src.score import compute_score, score_label
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
 HISTORY_PATH = Path(__file__).parent.parent / "output" / "history.json"
+LEADERBOARD_PATH = Path(__file__).parent.parent / "output" / "leaderboard.json"
 
 # In-memory history (id -> {prompt, urdf, refined_from, timestamp})
 _history: dict[str, dict] = {}
+
+# In-memory leaderboard (list of score entries)
+_leaderboard: list[dict] = []
 
 
 def _load_history():
@@ -41,6 +46,22 @@ def _save_history():
     HISTORY_PATH.parent.mkdir(exist_ok=True)
     entries = sorted(_history.values(), key=lambda e: e.get("timestamp", 0))
     HISTORY_PATH.write_text(json.dumps(entries, indent=2))
+
+
+def _load_leaderboard():
+    """Load leaderboard from disk on startup."""
+    global _leaderboard
+    if LEADERBOARD_PATH.exists():
+        try:
+            _leaderboard = json.loads(LEADERBOARD_PATH.read_text())
+        except (json.JSONDecodeError, KeyError):
+            _leaderboard = []
+
+
+def _save_leaderboard():
+    """Persist leaderboard to disk."""
+    LEADERBOARD_PATH.parent.mkdir(exist_ok=True)
+    LEADERBOARD_PATH.write_text(json.dumps(_leaderboard, indent=2))
 
 
 def _ensure_api_key():
@@ -164,6 +185,19 @@ def api_robot_delete(robot_id):
     return jsonify({"success": True})
 
 
+@app.route("/api/health", methods=["GET"])
+def api_health():
+    """Health check endpoint — useful for monitoring and uptime checks."""
+    return jsonify({
+        "status": "ok",
+        "robot_count": len(_history),
+        "pybullet_available": bool(
+            __import__("importlib").util.find_spec("pybullet")
+        ),
+        "version": "1.0.0",
+    })
+
+
 @app.route("/api/simulate", methods=["POST"])
 def api_simulate():
     """Run PyBullet simulation with selected terrain mode."""
@@ -187,21 +221,114 @@ def api_simulate():
         tmp_path.parent.mkdir(exist_ok=True)
         tmp_path.write_text(urdf)
         success, err, metrics = simulate_urdf(tmp_path, terrain_mode=terrain_mode)
+
+        # Compute score if simulation produced metrics
+        score_data = None
+        if metrics:
+            try:
+                score_data = compute_score(metrics, terrain_mode=terrain_mode)
+                score_data["label"] = score_label(score_data["final_score"])
+            except Exception:
+                score_data = None
+
         return jsonify({
             "success": success,
             "error": err if not success else None,
             "terrain_mode": terrain_mode,
             "metrics": metrics,
+            "score": score_data,
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route("/api/leaderboard", methods=["GET"])
+def api_leaderboard():
+    """Get the robot leaderboard, optionally filtered by terrain_mode."""
+    terrain_filter = request.args.get("terrain_mode", "").lower()
+    entries = _leaderboard
+    if terrain_filter and terrain_filter in TERRAIN_MODES:
+        entries = [e for e in entries if e.get("terrain_mode") == terrain_filter]
+    # Sort by final_score descending
+    entries = sorted(entries, key=lambda e: e.get("final_score", 0), reverse=True)
+    return jsonify({"leaderboard": entries})
+
+
+@app.route("/api/leaderboard/submit", methods=["POST"])
+def api_leaderboard_submit():
+    """
+    Submit a robot's simulation score to the leaderboard.
+    Expects: robot_id, terrain_mode (runs simulation + scoring server-side).
+    """
+    data = request.get_json() or {}
+    robot_id = data.get("robot_id")
+    terrain_mode = (data.get("terrain_mode") or "flat").lower()
+
+    if not robot_id or robot_id not in _history:
+        return jsonify({"error": "valid robot_id is required"}), 400
+
+    if terrain_mode not in TERRAIN_MODES:
+        terrain_mode = "flat"
+
+    entry = _history[robot_id]
+    urdf = entry["urdf"]
+
+    # Run simulation
+    try:
+        tmp_path = Path(__file__).parent.parent / "output" / "sim_test.urdf"
+        tmp_path.parent.mkdir(exist_ok=True)
+        tmp_path.write_text(urdf)
+        success, err, metrics = simulate_urdf(tmp_path, terrain_mode=terrain_mode)
+    except Exception as e:
+        return jsonify({"error": f"Simulation failed: {e}"}), 500
+
+    if not success:
+        return jsonify({"success": False, "error": err or "Simulation failed"}), 200
+
+    if not metrics:
+        return jsonify({"error": "No metrics from simulation"}), 500
+
+    score_data = compute_score(metrics, terrain_mode=terrain_mode)
+    score_data["label"] = score_label(score_data["final_score"])
+
+    # Build leaderboard entry
+    lb_entry = {
+        "id": str(uuid.uuid4()),
+        "robot_id": robot_id,
+        "prompt": entry["prompt"],
+        "terrain_mode": terrain_mode,
+        "final_score": score_data["final_score"],
+        "label": score_data["label"],
+        "stability_score": score_data["stability_score"],
+        "uprightness_score": score_data["uprightness_score"],
+        "grounding_score": score_data["grounding_score"],
+        "timestamp": time.time(),
+    }
+
+    # Check for existing entry for same robot+terrain — keep highest score
+    existing_idx = None
+    for i, existing in enumerate(_leaderboard):
+        if existing["robot_id"] == robot_id and existing["terrain_mode"] == terrain_mode:
+            existing_idx = i
+            break
+
+    if existing_idx is not None:
+        if lb_entry["final_score"] > _leaderboard[existing_idx]["final_score"]:
+            _leaderboard[existing_idx] = lb_entry
+    else:
+        _leaderboard.append(lb_entry)
+
+    _save_leaderboard()
+    return jsonify({"success": True, "entry": lb_entry, "score": score_data})
+
+
 def main():
     _load_history()
+    _load_leaderboard()
     port = int(os.environ.get("PORT", 5000))
     print(f"TreeHackNow Web UI: http://localhost:{port}")
     print(f"  History: {len(_history)} robots loaded from {HISTORY_PATH}")
+    print(f"  Leaderboard: {len(_leaderboard)} entries loaded from {LEADERBOARD_PATH}")
     app.run(host="0.0.0.0", port=port, debug=True)
 
 

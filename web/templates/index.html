@@ -40,9 +40,29 @@
       </section>
 
       <section class="content">
-        <aside class="history-panel">
-          <h2>History</h2>
-          <ul id="history-list"></ul>
+        <aside class="sidebar-panel">
+          <div class="sidebar-tabs">
+            <button class="sidebar-tab active" data-tab="history">History</button>
+            <button class="sidebar-tab" data-tab="leaderboard">Leaderboard</button>
+          </div>
+          <div id="tab-history" class="sidebar-tab-content active">
+            <div id="robot-count-badge" class="robot-count-badge" title="Total robots generated">0 robots</div>
+            <ul id="history-list"></ul>
+          </div>
+          <div id="tab-leaderboard" class="sidebar-tab-content" style="display: none;">
+            <div class="leaderboard-controls">
+              <select id="lb-terrain-filter" title="Filter by terrain">
+                <option value="">All terrains</option>
+                <option value="flat">Flat</option>
+                <option value="slope">Slope</option>
+                <option value="stairs">Stairs</option>
+                <option value="uneven">Uneven</option>
+              </select>
+            </div>
+            <div id="leaderboard-list" class="leaderboard-list">
+              <p class="leaderboard-empty">No scores yet. Simulate a robot and submit to leaderboard!</p>
+            </div>
+          </div>
         </aside>
 
         <div class="preview-panel">
@@ -61,6 +81,9 @@
             <button id="btn-simulate" class="btn btn-tertiary" disabled title="Run physics simulation on selected terrain">
               Simulate
             </button>
+            <button id="btn-submit-score" class="btn btn-score" disabled title="Submit score to leaderboard">
+              Submit to Leaderboard
+            </button>
             <button id="btn-download" class="btn btn-tertiary" disabled title="Download selected robot as .urdf file">
               Download URDF
             </button>
@@ -74,6 +97,7 @@
           </div>
           <div id="preview-error" class="error-msg" style="display: none;"></div>
           <div id="sim-metrics" class="sim-metrics" style="display: none;"></div>
+          <div id="score-display" class="score-display" style="display: none;"></div>
           <div id="source-panel" class="source-panel" style="display: none;">
             <pre id="source-code" class="source-code"></pre>
           </div>

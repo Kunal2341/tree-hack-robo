@@ -84,7 +84,15 @@ function updateViewSourceButton() {
   document.getElementById("btn-view-source").disabled = !selectedId;
 }
 
+function updateRobotCount(count) {
+  const badge = document.getElementById("robot-count-badge");
+  if (badge) {
+    badge.textContent = `${count} robot${count !== 1 ? "s" : ""}`;
+  }
+}
+
 function renderHistory(history) {
+  updateRobotCount(history.length);
   const ul = document.getElementById("history-list");
   ul.innerHTML = history
     .map(
