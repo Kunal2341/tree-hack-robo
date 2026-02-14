@@ -99,8 +99,18 @@
             <canvas id="preview-canvas" style="display: none;"></canvas>
           </div>
           <div id="preview-error" class="error-msg" style="display: none;"></div>
+          <div id="sanity-check-result" class="sanity-check-result" style="display: none;"></div>
           <div id="sim-metrics" class="sim-metrics" style="display: none;"></div>
           <div id="score-display" class="score-display" style="display: none;"></div>
+          <div id="feedback-panel" class="feedback-panel" style="display: none;">
+            <h3 class="feedback-title">Tweak your robot</h3>
+            <p class="feedback-desc">Click a suggestion or type your own feedback to iterate on this robot:</p>
+            <div id="feedback-suggestions" class="feedback-suggestions"></div>
+            <div class="feedback-custom">
+              <textarea id="feedback-input" rows="2" placeholder="e.g. The legs are too short, make them longer"></textarea>
+              <button id="btn-feedback-submit" class="btn btn-primary btn-sm">Apply Feedback</button>
+            </div>
+          </div>
           <div id="source-panel" class="source-panel" style="display: none;">
             <pre id="source-code" class="source-code"></pre>
           </div>

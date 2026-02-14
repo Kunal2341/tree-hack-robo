@@ -15,7 +15,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.agent import run_agent, run_agent_refine
-from src.simulate import simulate_urdf, TERRAIN_MODES
+from src.simulate import simulate_urdf, stress_test_urdf, physics_sanity_check, generate_feedback_suggestions, TERRAIN_MODES
 from src.score import compute_score, score_label
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
@@ -200,7 +200,12 @@ def api_health():
 
 @app.route("/api/simulate", methods=["POST"])
 def api_simulate():
-    """Run PyBullet simulation with selected terrain mode."""
+    """Run PyBullet simulation with selected terrain mode.
+
+    Now also performs a quick physics sanity check first (explosion,
+    fall-over, self-collision) and returns feedback suggestions so the
+    user can iterate on the robot interactively.
+    """
     data = request.get_json() or {}
     robot_id = data.get("robot_id")
     base_urdf = data.get("urdf")
@@ -220,6 +225,11 @@ def api_simulate():
         tmp_path = Path(__file__).parent.parent / "output" / "sim_test.urdf"
         tmp_path.parent.mkdir(exist_ok=True)
         tmp_path.write_text(urdf)
+
+        # ---- Phase 1: quick physics sanity check ----
+        sanity_ok, sanity_err, sanity_diag = physics_sanity_check(tmp_path)
+
+        # ---- Phase 2: full simulation ----
         success, err, metrics = simulate_urdf(tmp_path, terrain_mode=terrain_mode)
 
         # Compute score if simulation produced metrics
@@ -231,15 +241,52 @@ def api_simulate():
             except Exception:
                 score_data = None
 
+        # ---- Feedback suggestions for interactive tweaking ----
+        suggestions = generate_feedback_suggestions(metrics, sanity_diag)
+
         return jsonify({
             "success": success,
             "error": err if not success else None,
             "terrain_mode": terrain_mode,
             "metrics": metrics,
             "score": score_data,
+            "sanity_check": {
+                "passed": sanity_ok,
+                "error": sanity_err if not sanity_ok else None,
+                "diagnostics": sanity_diag,
+            },
+            "feedback_suggestions": suggestions,
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/sanity-check", methods=["POST"])
+def api_sanity_check():
+    """Run only the quick physics sanity check (no full simulation)."""
+    data = request.get_json() or {}
+    robot_id = data.get("robot_id")
+    base_urdf = data.get("urdf")
+
+    urdf = base_urdf
+    if not urdf and robot_id and robot_id in _history:
+        urdf = _history[robot_id]["urdf"]
+
+    if not urdf:
+        return jsonify({"error": "robot_id or urdf is required"}), 400
+
+    try:
+        tmp_path = Path(__file__).parent.parent / "output" / "sanity_test.urdf"
+        tmp_path.parent.mkdir(exist_ok=True)
+        tmp_path.write_text(urdf)
+        passed, err, diagnostics = physics_sanity_check(tmp_path)
+        return jsonify({
+            "passed": passed,
+            "error": err if not passed else None,
+            "diagnostics": diagnostics,
+        })
+    except Exception as e:
+        return jsonify({"passed": False, "error": str(e)}), 500
 
 
 @app.route("/api/leaderboard", methods=["GET"])

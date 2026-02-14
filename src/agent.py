@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 from src.generate import extract_urdf_from_response
 from src.validate import validate_all
-from src.simulate import simulate_urdf
+from src.simulate import simulate_urdf, physics_sanity_check
 
 SYSTEM_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "system_prompt.txt"
 REFINE_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "refine_prompt.txt"
@@ -103,10 +103,24 @@ def run_agent(
             )
             continue
 
-        # Simulate
+        # Write URDF for physics checks
         OUTPUT_DIR.mkdir(exist_ok=True)
         test_path = OUTPUT_DIR / "agent_test.urdf"
         test_path.write_text(urdf)
+
+        # Quick physics sanity check (explosion, fall-over, self-collisions)
+        sanity_ok, sanity_err, _sanity_diag = physics_sanity_check(test_path)
+        if not sanity_ok:
+            logger.warning("Sanity check failed (attempt %d): %s", attempt + 1, sanity_err)
+            current_prompt = (
+                f"The robot failed a physics sanity check: {sanity_err}\n\n"
+                f"Original request: {prompt}\n\n"
+                "Fix the URDF to prevent self-collisions, explosions, or immediate collapse. "
+                "Ensure links are properly spaced and joint limits are reasonable. Output ONLY valid XML."
+            )
+            continue
+
+        # Full simulation
         success, sim_err, _metrics = simulate_urdf(test_path, terrain_mode=terrain_mode)
 
         if success:
@@ -178,6 +192,18 @@ Output the complete modified URDF."""
         OUTPUT_DIR.mkdir(exist_ok=True)
         test_path = OUTPUT_DIR / "agent_test.urdf"
         test_path.write_text(urdf)
+
+        # Quick physics sanity check
+        sanity_ok, sanity_err, _sanity_diag = physics_sanity_check(test_path)
+        if not sanity_ok:
+            current_prompt = (
+                f"The modified robot failed a physics sanity check: {sanity_err}\n\n"
+                f"Original modification request: {refinement_prompt}\n\n"
+                "Fix the URDF to prevent self-collisions, explosions, or immediate collapse. "
+                "Output ONLY valid XML."
+            )
+            continue
+
         success, sim_err, _metrics = simulate_urdf(test_path, terrain_mode=terrain_mode)
 
         if success:
