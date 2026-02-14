@@ -230,7 +230,14 @@ def api_simulate():
         sanity_ok, sanity_err, sanity_diag = physics_sanity_check(tmp_path)
 
         # ---- Phase 2: full simulation ----
-        success, err, metrics = simulate_urdf(tmp_path, terrain_mode=terrain_mode)
+        enable_motors = bool(data.get("enable_motors", False))
+        record_trajectory = bool(data.get("record_trajectory", False))
+        success, err, metrics = simulate_urdf(
+            tmp_path,
+            terrain_mode=terrain_mode,
+            enable_motors=enable_motors,
+            record_trajectory=record_trajectory,
+        )
 
         # Compute score if simulation produced metrics
         score_data = None
@@ -287,6 +294,70 @@ def api_sanity_check():
         })
     except Exception as e:
         return jsonify({"passed": False, "error": str(e)}), 500
+
+
+@app.route("/api/stress-test", methods=["POST"])
+def api_stress_test():
+    """Run simulation on ALL terrain modes and return a scorecard."""
+    data = request.get_json() or {}
+    robot_id = data.get("robot_id")
+    base_urdf = data.get("urdf")
+    enable_motors = bool(data.get("enable_motors", False))
+
+    urdf = base_urdf
+    if not urdf and robot_id and robot_id in _history:
+        urdf = _history[robot_id]["urdf"]
+
+    if not urdf:
+        return jsonify({"error": "robot_id or urdf is required"}), 400
+
+    try:
+        tmp_path = Path(__file__).parent.parent / "output" / "stress_test.urdf"
+        tmp_path.parent.mkdir(exist_ok=True)
+        tmp_path.write_text(urdf)
+        results = stress_test_urdf(tmp_path, enable_motors=enable_motors)
+
+        # Add scores to each result
+        scorecard = {}
+        for terrain, result in results.items():
+            score_data = None
+            if result["metrics"]:
+                try:
+                    score_data = compute_score(result["metrics"], terrain_mode=terrain)
+                    score_data["label"] = score_label(score_data["final_score"])
+                except Exception:
+                    score_data = None
+            scorecard[terrain] = {
+                "success": result["success"],
+                "error": result["error"],
+                "score": score_data,
+                "metrics": {
+                    k: v for k, v in (result["metrics"] or {}).items()
+                    if k != "trajectory"
+                },
+            }
+
+        # Compute average score
+        scores = [
+            s["score"]["final_score"]
+            for s in scorecard.values()
+            if s["score"]
+        ]
+        avg_score = round(sum(scores) / len(scores), 1) if scores else 0
+        pass_count = sum(1 for s in scorecard.values() if s["success"])
+
+        return jsonify({
+            "scorecard": scorecard,
+            "summary": {
+                "average_score": avg_score,
+                "label": score_label(avg_score),
+                "terrains_passed": pass_count,
+                "terrains_total": len(TERRAIN_MODES),
+                "motors_enabled": enable_motors,
+            },
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/leaderboard", methods=["GET"])
