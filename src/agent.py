@@ -101,7 +101,7 @@ def run_agent(
         OUTPUT_DIR.mkdir(exist_ok=True)
         test_path = OUTPUT_DIR / "agent_test.urdf"
         test_path.write_text(urdf)
-        success, sim_err = simulate_urdf(test_path, terrain_mode=terrain_mode)
+        success, sim_err, _metrics = simulate_urdf(test_path, terrain_mode=terrain_mode)
 
         if success:
             if save_path:
@@ -169,7 +169,7 @@ Output the complete modified URDF."""
         OUTPUT_DIR.mkdir(exist_ok=True)
         test_path = OUTPUT_DIR / "agent_test.urdf"
         test_path.write_text(urdf)
-        success, sim_err = simulate_urdf(test_path, terrain_mode=terrain_mode)
+        success, sim_err, _metrics = simulate_urdf(test_path, terrain_mode=terrain_mode)
 
         if success:
             if save_path:

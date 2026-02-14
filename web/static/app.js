@@ -310,6 +310,7 @@ async function doSimulate() {
     } else {
       toast(res.error || "Simulation failed", "error");
     }
+    renderSimMetrics(res.metrics, res.success);
   } catch (e) {
     toast("Error: " + e.message, "error");
   } finally {
@@ -347,6 +348,49 @@ async function doRefine() {
   } finally {
     setLoading(false);
   }
+}
+
+function renderSimMetrics(metrics, success) {
+  const el = document.getElementById("sim-metrics");
+  if (!metrics) {
+    el.style.display = "none";
+    return;
+  }
+  const pos = metrics.final_position;
+  const statusIcon = success ? "&#10003;" : "&#10007;";
+  const statusClass = success ? "metric-ok" : "metric-fail";
+  const uprightIcon = metrics.is_upright ? "&#10003;" : "&#10007;";
+  const uprightClass = metrics.is_upright ? "metric-ok" : "metric-fail";
+
+  el.innerHTML = `
+    <div class="metrics-grid">
+      <div class="metric">
+        <span class="metric-label">Status</span>
+        <span class="metric-value ${statusClass}">${statusIcon} ${success ? "Stable" : "Unstable"}</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Final Position</span>
+        <span class="metric-value">(${pos.x}, ${pos.y}, ${pos.z})</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Distance</span>
+        <span class="metric-value">${metrics.distance_from_origin}m</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Displacement</span>
+        <span class="metric-value">${metrics.displacement}m</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Upright</span>
+        <span class="metric-value ${uprightClass}">${uprightIcon} ${metrics.is_upright ? "Yes" : "No"} (${metrics.tilt_cos})</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Terrain</span>
+        <span class="metric-value">${metrics.terrain_mode}</span>
+      </div>
+    </div>
+  `;
+  el.style.display = "block";
 }
 
 function doDownload() {

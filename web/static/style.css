@@ -387,6 +387,47 @@ body {
   font-size: 0.85rem;
 }
 
+/* Simulation metrics */
+.sim-metrics {
+  border-top: 1px solid var(--border);
+  padding: 0.75rem 1.25rem;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.5rem 1rem;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.metric-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.metric-value {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.metric-ok {
+  color: var(--accent);
+}
+
+.metric-fail {
+  color: var(--danger);
+}
+
 /* Source panel (View URDF XML) */
 .source-panel {
   border-top: 1px solid var(--border);

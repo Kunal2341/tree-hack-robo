@@ -103,16 +103,17 @@ def _load_terrain(physics_client: int, terrain_mode: str) -> float:
     return _load_terrain_flat(physics_client)
 
 
-def simulate_urdf(urdf_path: Path, terrain_mode: str = "flat") -> tuple[bool, str]:
+def simulate_urdf(urdf_path: Path, terrain_mode: str = "flat") -> tuple[bool, str, dict | None]:
     """
     Load URDF in PyBullet, run simulation for SIM_DURATION seconds.
     terrain_mode: "flat", "uneven", "stairs", or "slope" to test robustness.
-    Returns (success, error_msg).
+    Returns (success, error_msg, metrics_dict_or_None).
+    metrics includes: distance_from_origin, final_position, is_upright, displacement.
     """
     if not PYBULLET_AVAILABLE:
-        return False, "pybullet not installed. Run: pip install pybullet"
+        return False, "pybullet not installed. Run: pip install pybullet", None
     if not urdf_path.exists():
-        return False, f"File not found: {urdf_path}"
+        return False, f"File not found: {urdf_path}", None
 
     if GUI:
         physics_client = p.connect(p.GUI)
@@ -126,23 +127,44 @@ def simulate_urdf(urdf_path: Path, terrain_mode: str = "flat") -> tuple[bool, st
         p.setTimeStep(1.0 / 240.0)
 
         spawn_height = _load_terrain(physics_client, terrain_mode)
-        robot_id = p.loadURDF(str(urdf_path), [0, 0, spawn_height], useFixedBase=False)
+        start_pos = [0, 0, spawn_height]
+        robot_id = p.loadURDF(str(urdf_path), start_pos, useFixedBase=False)
 
         # Run simulation
         steps = int(SIM_DURATION * 240)
         for _ in range(steps):
             p.stepSimulation()
 
-        # Check if robot exploded (parts too far from origin)
-        pos, _ = p.getBasePositionAndOrientation(robot_id)
+        # Collect metrics
+        pos, orn = p.getBasePositionAndOrientation(robot_id)
         x, y, z = pos
-        dist = (x**2 + y**2 + z**2) ** 0.5
-        if dist > 50:
-            return False, f"Robot exploded: base moved {dist:.1f}m from origin"
 
-        return True, ""
+        dist = (x**2 + y**2 + z**2) ** 0.5
+        displacement = ((x - start_pos[0])**2 + (y - start_pos[1])**2 + (z - start_pos[2])**2) ** 0.5
+
+        # Check uprightness: the robot's local Z axis (0,0,1) in world frame
+        import math
+        rot_matrix = p.getMatrixFromQuaternion(orn)
+        # The Z component of the local Z axis is rot_matrix[8] (3rd column, 3rd row)
+        up_z = rot_matrix[8]
+        is_upright = up_z > 0.5  # cos(60°) ≈ 0.5 — tilted less than 60° from vertical
+
+        metrics = {
+            "final_position": {"x": round(x, 3), "y": round(y, 3), "z": round(z, 3)},
+            "distance_from_origin": round(dist, 3),
+            "displacement": round(displacement, 3),
+            "is_upright": is_upright,
+            "tilt_cos": round(up_z, 3),
+            "terrain_mode": terrain_mode,
+            "sim_duration_s": SIM_DURATION,
+        }
+
+        if dist > 50:
+            return False, f"Robot exploded: base moved {dist:.1f}m from origin", metrics
+
+        return True, "", metrics
     except Exception as e:
-        return False, str(e)
+        return False, str(e), None
     finally:
         p.disconnect()
 
@@ -155,9 +177,15 @@ def main():
             terrain = sys.argv[i + 1].lower()
             break
     urdf_path = Path(path)
-    success, err = simulate_urdf(urdf_path, terrain_mode=terrain)
+    success, err, metrics = simulate_urdf(urdf_path, terrain_mode=terrain)
     if success:
         print(f"Simulation OK: robot stable on {terrain} terrain.")
+        if metrics:
+            pos = metrics["final_position"]
+            print(f"  Final position: ({pos['x']}, {pos['y']}, {pos['z']})")
+            print(f"  Distance from origin: {metrics['distance_from_origin']}m")
+            print(f"  Displacement: {metrics['displacement']}m")
+            print(f"  Upright: {'yes' if metrics['is_upright'] else 'no'} (tilt_cos={metrics['tilt_cos']})")
     else:
         print(f"Simulation failed: {err}")
         sys.exit(1)

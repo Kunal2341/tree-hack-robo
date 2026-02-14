@@ -186,11 +186,12 @@ def api_simulate():
         tmp_path = Path(__file__).parent.parent / "output" / "sim_test.urdf"
         tmp_path.parent.mkdir(exist_ok=True)
         tmp_path.write_text(urdf)
-        success, err = simulate_urdf(tmp_path, terrain_mode=terrain_mode)
+        success, err, metrics = simulate_urdf(tmp_path, terrain_mode=terrain_mode)
         return jsonify({
             "success": success,
             "error": err if not success else None,
             "terrain_mode": terrain_mode,
+            "metrics": metrics,
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
