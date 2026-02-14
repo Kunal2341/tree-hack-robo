@@ -4,6 +4,15 @@ Generate robot URDF files from natural language using an LLM, validate with urdf
 
 ## Setup
 
+**Conda (recommended):**
+
+```bash
+conda env create -f environment.yml
+conda activate treehacknow
+```
+
+**Or pip only:**
+
 ```bash
 pip install -r requirements.txt
 ```
