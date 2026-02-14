@@ -742,3 +742,129 @@ kbd {
   font-size: 0.75rem;
   color: var(--text);
 }
+
+/* ─── Sanity Check Result ────────────────────────────────── */
+
+.sanity-check-result {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-top: 0.5rem;
+}
+
+.sanity-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.sanity-pass {
+  color: #22c55e;
+}
+
+.sanity-fail {
+  color: #ef4444;
+}
+
+.sanity-icon {
+  font-size: 1.1rem;
+}
+
+.sanity-issues {
+  list-style: disc;
+  padding-left: 1.5rem;
+  margin: 0.4rem 0 0;
+  color: #fbbf24;
+  font-size: 0.8rem;
+}
+
+.sanity-issues li {
+  margin-bottom: 0.2rem;
+}
+
+.sanity-detail {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.3rem;
+}
+
+/* ─── Feedback Panel (Interactive Tweaking) ──────────────── */
+
+.feedback-panel {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.feedback-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 0.25rem;
+}
+
+.feedback-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0 0 0.75rem;
+}
+
+.feedback-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.feedback-chip {
+  background: rgba(139, 92, 246, 0.12);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.feedback-chip:hover {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: rgba(139, 92, 246, 0.6);
+  color: #c4b5fd;
+}
+
+.feedback-custom {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.feedback-custom textarea {
+  flex: 1;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font);
+  font-size: 0.85rem;
+  resize: vertical;
+  min-height: 2.2rem;
+}
+
+.feedback-custom textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.btn-sm {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}

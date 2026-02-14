@@ -74,15 +74,24 @@
             <span id="preview-prompt" class="preview-prompt"></span>
           </div>
           <div class="terrain-section">
-            <label for="terrain-mode">Terrain mode</label>
+            <label for="terrain-mode">Terrain</label>
             <select id="terrain-mode" title="Simulate on different terrains to test robustness">
               <option value="flat">Flat ground</option>
               <option value="uneven">Uneven terrain</option>
               <option value="stairs">Stairs</option>
               <option value="slope">Slope</option>
             </select>
+            <label class="toggle-label" title="Enable sinusoidal motor control on joints">
+              <input type="checkbox" id="chk-motors"> Motors
+            </label>
             <button id="btn-simulate" class="btn btn-tertiary" disabled title="Run physics simulation on selected terrain">
               Simulate
+            </button>
+            <button id="btn-replay" class="btn btn-tertiary" disabled title="Simulate with trajectory recording and replay animation">
+              Simulate &amp; Replay
+            </button>
+            <button id="btn-stress-test" class="btn btn-tertiary" disabled title="Run on all terrains and get a scorecard">
+              Stress Test
             </button>
             <button id="btn-submit-score" class="btn btn-score" disabled title="Submit score to leaderboard">
               Submit to Leaderboard
@@ -100,8 +109,15 @@
           </div>
           <div id="preview-error" class="error-msg" style="display: none;"></div>
           <div id="sanity-check-result" class="sanity-check-result" style="display: none;"></div>
+          <div id="replay-controls" class="replay-controls" style="display: none;">
+            <button id="replay-play" class="btn btn-tertiary btn-sm" title="Play/Pause">Play</button>
+            <input id="replay-scrubber" type="range" min="0" max="100" value="0" class="replay-scrubber">
+            <span id="replay-time" class="replay-time">0.0s / 0.0s</span>
+            <button id="replay-stop" class="btn btn-tertiary btn-sm" title="Stop and reset">Stop</button>
+          </div>
           <div id="sim-metrics" class="sim-metrics" style="display: none;"></div>
           <div id="score-display" class="score-display" style="display: none;"></div>
+          <div id="stress-test-display" class="stress-test-display" style="display: none;"></div>
           <div id="feedback-panel" class="feedback-panel" style="display: none;">
             <h3 class="feedback-title">Tweak your robot</h3>
             <p class="feedback-desc">Click a suggestion or type your own feedback to iterate on this robot:</p>

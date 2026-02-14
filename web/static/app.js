@@ -10,11 +10,23 @@ const API = {
       body: JSON.stringify({ prompt }),
     }).then((r) => r.json()),
 
-  simulate: (robotId, terrainMode) =>
+  simulate: (robotId, terrainMode, opts = {}) =>
     fetch("/api/simulate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ robot_id: robotId, terrain_mode: terrainMode }),
+      body: JSON.stringify({
+        robot_id: robotId,
+        terrain_mode: terrainMode,
+        enable_motors: opts.enableMotors || false,
+        record_trajectory: opts.recordTrajectory || false,
+      }),
+    }).then((r) => r.json()),
+
+  stressTest: (robotId, enableMotors = false) =>
+    fetch("/api/stress-test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ robot_id: robotId, enable_motors: enableMotors }),
     }).then((r) => r.json()),
 
   refine: (prompt, baseId, baseUrdf) =>
@@ -53,6 +65,14 @@ let renderer = null;
 let camera = null;
 let animationId = null;
 
+// Replay state
+let replayData = null;  // trajectory object from API
+let replayPlaying = false;
+let replayFrame = 0;
+let replayStartTime = 0;
+let replayAnimId = null;
+let currentRobot = null;  // Three.js robot object for replay
+
 function toast(msg, type = "success") {
   const el = document.getElementById("toast");
   el.textContent = msg;
@@ -71,12 +91,16 @@ function setLoading(loading) {
     document.getElementById("btn-download").disabled = true;
     document.getElementById("btn-view-source").disabled = true;
     document.getElementById("btn-submit-score").disabled = true;
+    document.getElementById("btn-replay").disabled = true;
+    document.getElementById("btn-stress-test").disabled = true;
   } else {
     updateRefineButton();
     updateSimulateButton();
     updateDownloadButton();
     updateViewSourceButton();
     updateSubmitButton();
+    updateReplayButton();
+    updateStressTestButton();
   }
 }
 
@@ -100,6 +124,14 @@ function updateViewSourceButton() {
 
 function updateSubmitButton() {
   document.getElementById("btn-submit-score").disabled = !selectedId;
+}
+
+function updateReplayButton() {
+  document.getElementById("btn-replay").disabled = !selectedId;
+}
+
+function updateStressTestButton() {
+  document.getElementById("btn-stress-test").disabled = !selectedId;
 }
 
 function updateRobotCount(count) {
@@ -181,10 +213,17 @@ function selectRobot(id) {
   updateDownloadButton();
   updateViewSourceButton();
   updateSubmitButton();
-  // Hide source/score panels when switching robots
+  updateReplayButton();
+  updateStressTestButton();
+  // Hide panels when switching robots
   document.getElementById("source-panel").style.display = "none";
   document.getElementById("score-display").style.display = "none";
   document.getElementById("sim-metrics").style.display = "none";
+  document.getElementById("sanity-check-result").style.display = "none";
+  document.getElementById("feedback-panel").style.display = "none";
+  document.getElementById("replay-controls").style.display = "none";
+  document.getElementById("stress-test-display").style.display = "none";
+  stopReplay();
   loadRobotForPreview(id);
 }
 
@@ -276,6 +315,7 @@ async function renderUrdf(urdfXml, canvasEl, placeholderEl) {
     }
 
     robot.name = "urdf-robot";
+    currentRobot = robot;
     scene.add(robot);
     placeholderEl.style.display = "none";
     canvasEl.style.display = "block";
@@ -329,25 +369,121 @@ async function doSimulate() {
   }
 
   const terrainMode = document.getElementById("terrain-mode").value;
+  const enableMotors = document.getElementById("chk-motors").checked;
   const btn = document.getElementById("btn-simulate");
   btn.disabled = true;
   btn.textContent = "Simulating…";
 
   try {
-    const res = await API.simulate(selectedId, terrainMode);
+    const res = await API.simulate(selectedId, terrainMode, { enableMotors });
     if (res.success) {
       toast(`Simulation OK on ${terrainMode} terrain`);
     } else {
       toast(res.error || "Simulation failed", "error");
     }
+    renderSanityCheck(res.sanity_check);
     renderSimMetrics(res.metrics, res.success);
     renderScoreDisplay(res.score);
+    renderFeedbackSuggestions(res.feedback_suggestions || [], res.success);
   } catch (e) {
     toast("Error: " + e.message, "error");
   } finally {
     btn.disabled = false;
     btn.textContent = "Simulate";
     updateSimulateButton();
+  }
+}
+
+function renderSanityCheck(sanity) {
+  const el = document.getElementById("sanity-check-result");
+  if (!sanity) {
+    el.style.display = "none";
+    return;
+  }
+  const passed = sanity.passed;
+  const diag = sanity.diagnostics || {};
+  const issues = diag.issues || [];
+  const selfCollInit = diag.self_collisions_initial || [];
+  const selfCollFinal = diag.self_collisions_final || [];
+
+  let html = `<div class="sanity-header ${passed ? "sanity-pass" : "sanity-fail"}">`;
+  html += `<span class="sanity-icon">${passed ? "&#10003;" : "&#10007;"}</span>`;
+  html += `<span>Physics Sanity Check: <strong>${passed ? "PASSED" : "FAILED"}</strong></span>`;
+  html += `</div>`;
+
+  if (issues.length > 0) {
+    html += `<ul class="sanity-issues">`;
+    issues.forEach((issue) => {
+      html += `<li>${escapeHtml(issue)}</li>`;
+    });
+    html += `</ul>`;
+  }
+
+  if (selfCollInit.length > 0) {
+    html += `<div class="sanity-detail">Self-collisions at spawn: ${escapeHtml(selfCollInit.join(", "))}</div>`;
+  }
+  if (selfCollFinal.length > 0 && selfCollFinal.join(",") !== selfCollInit.join(",")) {
+    html += `<div class="sanity-detail">Self-collisions after settling: ${escapeHtml(selfCollFinal.join(", "))}</div>`;
+  }
+
+  el.innerHTML = html;
+  el.style.display = "block";
+}
+
+function renderFeedbackSuggestions(suggestions, simSuccess) {
+  const panel = document.getElementById("feedback-panel");
+  const container = document.getElementById("feedback-suggestions");
+
+  if (!selectedId) {
+    panel.style.display = "none";
+    return;
+  }
+
+  container.innerHTML = "";
+  suggestions.forEach((s) => {
+    const chip = document.createElement("button");
+    chip.className = "feedback-chip";
+    chip.textContent = s.text;
+    chip.title = s.prompt;
+    chip.addEventListener("click", () => doFeedbackRefine(s.prompt));
+    container.appendChild(chip);
+  });
+
+  panel.style.display = "block";
+}
+
+async function doFeedbackRefine(feedbackPrompt) {
+  if (!selectedId) {
+    toast("No robot selected", "error");
+    return;
+  }
+  if (!feedbackPrompt || !feedbackPrompt.trim()) {
+    toast("Enter some feedback first", "error");
+    return;
+  }
+
+  setLoading(true);
+  const btn = document.getElementById("btn-feedback-submit");
+  btn.disabled = true;
+  btn.textContent = "Refining…";
+
+  try {
+    const res = await API.refine(feedbackPrompt.trim(), selectedId);
+    if (res.success) {
+      toast("Robot updated with your feedback!");
+      const hist = await API.history();
+      renderHistory(hist.history);
+      selectRobot(res.id);
+      document.getElementById("feedback-input").value = "";
+    } else {
+      toast(res.error || "Refinement failed", "error");
+    }
+  } catch (e) {
+    toast("Error: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Apply Feedback";
+    setLoading(false);
   }
 }
 
@@ -609,6 +745,10 @@ async function init() {
   document.getElementById("btn-download").addEventListener("click", doDownload);
   document.getElementById("btn-view-source").addEventListener("click", doViewSource);
   document.getElementById("btn-submit-score").addEventListener("click", doSubmitScore);
+  document.getElementById("btn-feedback-submit").addEventListener("click", () => {
+    const input = document.getElementById("feedback-input");
+    doFeedbackRefine(input.value);
+  });
 
   // Sidebar tabs
   document.querySelectorAll(".sidebar-tab").forEach((tab) => {
