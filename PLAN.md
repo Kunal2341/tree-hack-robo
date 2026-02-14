@@ -47,6 +47,28 @@ Build a system where an LLM generates robot descriptions (URDF), validates them,
 
 ---
 
+## Phase 5: Web UI Enhancements (Post-MVP)
+**Goal:** Improve web UX — export, inspect, manage history.
+
+| Milestone | Deliverable | Files |
+|-----------|-------------|-------|
+| **5.1 Download URDF** | Add "Download" button to save selected robot as `.urdf` file | `web/templates/index.html`, `web/static/app.js` |
+| **5.2 View URDF Source** | Collapsible "View source" section showing raw XML | `web/templates/index.html`, `web/static/app.js`, `web/static/style.css` |
+| **5.3 Delete from History** | Trash icon per history item; remove from `_history` | `web/app.py` (add `DELETE /api/robot/<id>`), `web/static/app.js`, `web/templates/index.html` |
+| **5.4 Prompt Examples** | Clickable example prompts (e.g. "4-legged dog", "box with wheels") | `web/templates/index.html`, `web/static/app.js` |
+| **5.5 History Persistence** | Save `_history` to `output/history.json`; load on startup | `web/app.py` |
+| **5.6 Simulation Metrics** | Return distance traveled, final position from `simulate_urdf` | `src/simulate.py`, `web/app.py`, `web/static/app.js` |
+
+### Implementation Order
+1. **5.1** — Download (client-only: create Blob + `<a download>`)
+2. **5.2** — View source (client-only: collapsible `<pre>` with URDF)
+3. **5.3** — Delete (API + client)
+4. **5.4** — Examples (client-only: preset buttons)
+5. **5.5** — Persistence (server: load/save JSON)
+6. **5.6** — Metrics (simulate.py changes + API + UI display)
+
+---
+
 ## Project Structure
 ```
 TreeHackNow/
@@ -59,9 +81,13 @@ TreeHackNow/
 │   ├── validate.py      # urdfpy validation + custom checks
 │   ├── simulate.py      # PyBullet simulation
 │   └── agent.py         # Intelligent loop (retry + error feedback)
+├── web/
+│   ├── app.py           # Flask — /api/generate, /api/refine, /api/simulate, /api/robot
+│   ├── templates/       # index.html
+│   └── static/          # app.js, style.css
 ├── prompts/
 │   └── system_prompt.txt
-├── output/              # Generated URDFs
+├── output/              # Generated URDFs, history.json (Phase 5.5)
 └── tests/
 ```
 

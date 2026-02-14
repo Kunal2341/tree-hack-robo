@@ -323,6 +323,25 @@ body {
   font-size: 0.85rem;
 }
 
+/* Source panel (View URDF XML) */
+.source-panel {
+  border-top: 1px solid var(--border);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.source-code {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.6;
+  background: rgba(0, 0, 0, 0.3);
+}
+
 /* Toast */
 .toast {
   position: fixed;

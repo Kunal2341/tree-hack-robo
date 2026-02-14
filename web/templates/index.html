@@ -53,12 +53,21 @@
             <button id="btn-simulate" class="btn btn-tertiary" disabled title="Run physics simulation on selected terrain">
               Simulate
             </button>
+            <button id="btn-download" class="btn btn-tertiary" disabled title="Download selected robot as .urdf file">
+              Download URDF
+            </button>
+            <button id="btn-view-source" class="btn btn-tertiary" disabled title="Show/hide raw URDF XML">
+              View Source
+            </button>
           </div>
           <div id="preview-container">
             <div id="preview-placeholder">Select a robot from history to preview</div>
             <canvas id="preview-canvas" style="display: none;"></canvas>
           </div>
           <div id="preview-error" class="error-msg" style="display: none;"></div>
+          <div id="source-panel" class="source-panel" style="display: none;">
+            <pre id="source-code" class="source-code"></pre>
+          </div>
         </div>
       </section>
     </main>

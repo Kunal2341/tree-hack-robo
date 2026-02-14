@@ -33,6 +33,7 @@ const API = {
 };
 
 let selectedId = null;
+let selectedUrdf = null;
 let scene = null;
 let renderer = null;
 let camera = null;
@@ -53,9 +54,13 @@ function setLoading(loading) {
   if (loading) {
     btnRefine.disabled = true;
     document.getElementById("btn-simulate").disabled = true;
+    document.getElementById("btn-download").disabled = true;
+    document.getElementById("btn-view-source").disabled = true;
   } else {
     updateRefineButton();
     updateSimulateButton();
+    updateDownloadButton();
+    updateViewSourceButton();
   }
 }
 
@@ -67,6 +72,14 @@ function updateRefineButton() {
 function updateSimulateButton() {
   const btn = document.getElementById("btn-simulate");
   btn.disabled = !selectedId;
+}
+
+function updateDownloadButton() {
+  document.getElementById("btn-download").disabled = !selectedId;
+}
+
+function updateViewSourceButton() {
+  document.getElementById("btn-view-source").disabled = !selectedId;
 }
 
 function renderHistory(history) {
@@ -100,6 +113,10 @@ function selectRobot(id) {
   });
   updateRefineButton();
   updateSimulateButton();
+  updateDownloadButton();
+  updateViewSourceButton();
+  // Hide source panel when switching robots
+  document.getElementById("source-panel").style.display = "none";
   loadRobotForPreview(id);
 }
 
@@ -113,6 +130,7 @@ async function loadRobotForPreview(id) {
     const data = await API.robot(id);
     promptEl.textContent = data.prompt;
     errEl.style.display = "none";
+    selectedUrdf = data.urdf || null;
 
     if (data.urdf) {
       await renderUrdf(data.urdf, canvas, placeholder);
@@ -293,10 +311,44 @@ async function doRefine() {
   }
 }
 
+function doDownload() {
+  if (!selectedUrdf) {
+    toast("No robot selected to download", "error");
+    return;
+  }
+  const blob = new Blob([selectedUrdf], { type: "application/xml" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `robot-${selectedId ? selectedId.slice(0, 8) : "export"}.urdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast("URDF downloaded!");
+}
+
+function doViewSource() {
+  const panel = document.getElementById("source-panel");
+  const code = document.getElementById("source-code");
+  if (panel.style.display === "none") {
+    if (!selectedUrdf) {
+      toast("No robot selected", "error");
+      return;
+    }
+    code.textContent = selectedUrdf;
+    panel.style.display = "block";
+  } else {
+    panel.style.display = "none";
+  }
+}
+
 async function init() {
   document.getElementById("btn-generate").addEventListener("click", doGenerate);
   document.getElementById("btn-refine").addEventListener("click", doRefine);
   document.getElementById("btn-simulate").addEventListener("click", doSimulate);
+  document.getElementById("btn-download").addEventListener("click", doDownload);
+  document.getElementById("btn-view-source").addEventListener("click", doViewSource);
 
   document.getElementById("prompt").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {

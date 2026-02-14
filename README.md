@@ -155,4 +155,4 @@ npm run web
 
 ## Plan
 
-See [PLAN.md](PLAN.md) for the full implementation roadmap.
+See [PLAN.md](PLAN.md) for the full implementation roadmap. **Phase 5** covers web UI enhancements: Download URDF, View source, Delete from history, Prompt examples, History persistence, Simulation metrics.
