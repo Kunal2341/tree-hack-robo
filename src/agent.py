@@ -1,6 +1,7 @@
 """
 Phase 3: Intelligent loop — feed simulator errors back to LLM, retry with max_retries.
 Phase 4: Chain-of-thought for multi-legged robots.
+Feature: Iterative refinement — modify existing URDF with follow-up prompts.
 """
 
 import os
@@ -8,11 +9,12 @@ from pathlib import Path
 
 from openai import OpenAI
 
-from src.generate import generate_robot, extract_urdf_from_response
+from src.generate import extract_urdf_from_response
 from src.validate import validate_all
 from src.simulate import simulate_urdf
 
 SYSTEM_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "system_prompt.txt"
+REFINE_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "refine_prompt.txt"
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
 
 MAX_RETRIES = 5
@@ -20,6 +22,11 @@ MAX_RETRIES = 5
 
 def load_system_prompt() -> str:
     with open(SYSTEM_PROMPT_PATH) as f:
+        return f.read().strip()
+
+
+def load_refine_prompt() -> str:
+    with open(REFINE_PROMPT_PATH) as f:
         return f.read().strip()
 
 
@@ -52,9 +59,14 @@ def is_multi_leg_request(prompt: str) -> tuple[bool, int]:
     return False, 0
 
 
-def run_agent(prompt: str, save_path: Path | None = None) -> tuple[bool, str, str]:
+def run_agent(
+    prompt: str,
+    save_path: Path | None = None,
+    terrain_mode: str = "flat",
+) -> tuple[bool, str, str]:
     """
     Generate → Validate → Simulate. On failure, retry with error feedback (max 5).
+    terrain_mode: "flat", "uneven", "stairs", or "slope" to test robustness.
     Returns (success, final_urdf, message).
     """
     client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
@@ -89,7 +101,7 @@ def run_agent(prompt: str, save_path: Path | None = None) -> tuple[bool, str, st
         OUTPUT_DIR.mkdir(exist_ok=True)
         test_path = OUTPUT_DIR / "agent_test.urdf"
         test_path.write_text(urdf)
-        success, sim_err = simulate_urdf(test_path)
+        success, sim_err = simulate_urdf(test_path, terrain_mode=terrain_mode)
 
         if success:
             if save_path:
@@ -105,10 +117,83 @@ def run_agent(prompt: str, save_path: Path | None = None) -> tuple[bool, str, st
     return False, "", f"Failed after {MAX_RETRIES} retries. Human help needed."
 
 
+def run_agent_refine(
+    refinement_prompt: str,
+    base_urdf: str,
+    save_path: Path | None = None,
+    terrain_mode: str = "flat",
+) -> tuple[bool, str, str]:
+    """
+    Iterative refinement: modify an existing URDF based on a follow-up prompt.
+    E.g. "make it heavier", "add another wheel", "shorter legs".
+    terrain_mode: "flat", "uneven", "stairs", or "slope" to test robustness.
+    Returns (success, final_urdf, message).
+    """
+    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    system = load_refine_prompt()
+
+    user_content = f"""Current URDF:
+
+```xml
+{base_urdf}
+```
+
+Modification request: {refinement_prompt}
+
+Output the complete modified URDF."""
+
+    current_prompt = user_content
+
+    for attempt in range(MAX_RETRIES):
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": current_prompt},
+            ],
+        )
+        raw = response.choices[0].message.content
+        urdf = extract_urdf_from_response(raw)
+
+        valid, err = validate_all(urdf)
+        if not valid:
+            current_prompt = (
+                f"The modified robot failed validation: {err}\n\n"
+                f"Original modification request: {refinement_prompt}\n\n"
+                "Here was the URDF you tried to output:\n\n"
+                f"```xml\n{urdf[:2000]}...\n```\n\n"
+                "Fix the URDF and output ONLY valid XML."
+            )
+            continue
+
+        OUTPUT_DIR.mkdir(exist_ok=True)
+        test_path = OUTPUT_DIR / "agent_test.urdf"
+        test_path.write_text(urdf)
+        success, sim_err = simulate_urdf(test_path, terrain_mode=terrain_mode)
+
+        if success:
+            if save_path:
+                save_path.write_text(urdf)
+            return True, urdf, "OK"
+        else:
+            current_prompt = (
+                f"The modified robot failed simulation: {sim_err}\n\n"
+                f"Original modification request: {refinement_prompt}\n\n"
+                "Fix the URDF (check link positions, joint limits, effort) and output ONLY valid XML."
+            )
+
+    return False, "", f"Failed after {MAX_RETRIES} retries. Human help needed."
+
+
 def main():
     import sys
     prompt = sys.argv[1] if len(sys.argv) > 1 else "A 4-legged dog robot"
-    success, urdf, msg = run_agent(prompt)
+    terrain = "flat"
+    for i, arg in enumerate(sys.argv):
+        if arg in ("--terrain", "-t") and i + 1 < len(sys.argv):
+            terrain = sys.argv[i + 1].lower()
+            break
+    success, urdf, msg = run_agent(prompt, terrain_mode=terrain)
     if success:
         out = OUTPUT_DIR / "robot.urdf"
         out.write_text(urdf)

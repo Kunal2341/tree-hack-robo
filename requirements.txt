@@ -1,3 +1,5 @@
 openai>=1.0.0
 urdfpy>=0.0.20
 pybullet>=3.2.5
+flask>=3.0.0
+python-dotenv>=1.0.0

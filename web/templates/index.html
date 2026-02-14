@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TreeHackNow — Robot URDF Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>TreeHackNow</h1>
+      <p class="tagline">Generate robot URDFs from natural language</p>
+    </header>
+
+    <main class="main">
+      <section class="input-section">
+        <div class="input-group">
+          <label for="prompt">Describe your robot</label>
+          <textarea id="prompt" rows="2" placeholder="e.g. A 4-legged dog robot, or A box with 4 wheels"></textarea>
+        </div>
+        <div class="actions">
+          <button id="btn-generate" class="btn btn-primary">Generate</button>
+          <button id="btn-refine" class="btn btn-secondary" disabled title="Refine the selected robot">
+            Refine selected
+          </button>
+        </div>
+        <p class="hint" id="refine-hint">Select a robot from history, then type a refinement (e.g. "make it heavier") and click Refine.</p>
+      </section>
+
+      <section class="content">
+        <aside class="history-panel">
+          <h2>History</h2>
+          <ul id="history-list"></ul>
+        </aside>
+
+        <div class="preview-panel">
+          <div class="preview-header">
+            <h2 id="preview-title">3D Preview</h2>
+            <span id="preview-prompt" class="preview-prompt"></span>
+          </div>
+          <div class="terrain-section">
+            <label for="terrain-mode">Terrain mode</label>
+            <select id="terrain-mode" title="Simulate on different terrains to test robustness">
+              <option value="flat">Flat ground</option>
+              <option value="uneven">Uneven terrain</option>
+              <option value="stairs">Stairs</option>
+              <option value="slope">Slope</option>
+            </select>
+            <button id="btn-simulate" class="btn btn-tertiary" disabled title="Run physics simulation on selected terrain">
+              Simulate
+            </button>
+          </div>
+          <div id="preview-container">
+            <div id="preview-placeholder">Select a robot from history to preview</div>
+            <canvas id="preview-canvas" style="display: none;"></canvas>
+          </div>
+          <div id="preview-error" class="error-msg" style="display: none;"></div>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>
