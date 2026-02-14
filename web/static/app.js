@@ -186,6 +186,8 @@ function renderHistory(history) {
           updateDownloadButton();
           updateViewSourceButton();
           updateSubmitButton();
+          updateReplayButton();
+          updateStressTestButton();
         }
         const { history: h } = await API.history();
         renderHistory(h);
@@ -738,6 +740,194 @@ function switchSidebarTab(tabName) {
   }
 }
 
+// ---- Replay functions ----
+
+function stopReplay() {
+  replayPlaying = false;
+  replayData = null;
+  replayFrame = 0;
+  if (replayAnimId) {
+    cancelAnimationFrame(replayAnimId);
+    replayAnimId = null;
+  }
+  const playBtn = document.getElementById("replay-play");
+  if (playBtn) playBtn.textContent = "Play";
+}
+
+function startReplayAnimation() {
+  if (!replayData || !currentRobot) return;
+  const frames = replayData.frames;
+  const fps = replayData.fps;
+  const frameDuration = 1000 / fps;
+  const scrubber = document.getElementById("replay-scrubber");
+  const timeEl = document.getElementById("replay-time");
+  const duration = replayData.duration;
+
+  replayStartTime = performance.now() - (replayFrame * frameDuration);
+
+  function tick() {
+    if (!replayPlaying) return;
+    const elapsed = performance.now() - replayStartTime;
+    replayFrame = Math.floor(elapsed / frameDuration);
+
+    if (replayFrame >= frames.length) {
+      replayFrame = frames.length - 1;
+      replayPlaying = false;
+      document.getElementById("replay-play").textContent = "Play";
+    }
+
+    applyReplayFrame(frames[replayFrame]);
+    scrubber.value = Math.round((replayFrame / Math.max(frames.length - 1, 1)) * 100);
+    timeEl.textContent = `${(replayFrame / fps).toFixed(1)}s / ${duration.toFixed(1)}s`;
+
+    if (replayPlaying) {
+      replayAnimId = requestAnimationFrame(tick);
+    }
+  }
+  tick();
+}
+
+function applyReplayFrame(frame) {
+  if (!currentRobot || !frame) return;
+
+  // Apply joint positions
+  if (frame.joints && currentRobot.joints) {
+    for (const [name, angle] of Object.entries(frame.joints)) {
+      if (currentRobot.joints[name]) {
+        currentRobot.joints[name].setJointValue(angle);
+      }
+    }
+  }
+}
+
+async function doReplay() {
+  if (!selectedId) {
+    toast("Select a robot from history first", "error");
+    return;
+  }
+
+  const terrainMode = document.getElementById("terrain-mode").value;
+  const enableMotors = document.getElementById("chk-motors").checked;
+  const btn = document.getElementById("btn-replay");
+  btn.disabled = true;
+  btn.textContent = "Recording…";
+
+  try {
+    const res = await API.simulate(selectedId, terrainMode, {
+      enableMotors,
+      recordTrajectory: true,
+    });
+
+    if (res.success || res.metrics) {
+      renderSimMetrics(res.metrics, res.success);
+      renderScoreDisplay(res.score);
+
+      if (res.metrics && res.metrics.trajectory) {
+        replayData = res.metrics.trajectory;
+        replayFrame = 0;
+        replayPlaying = false;
+
+        const controls = document.getElementById("replay-controls");
+        controls.style.display = "flex";
+        document.getElementById("replay-scrubber").value = 0;
+        document.getElementById("replay-time").textContent =
+          `0.0s / ${replayData.duration.toFixed(1)}s`;
+        document.getElementById("replay-play").textContent = "Play";
+
+        toast(`Recorded ${replayData.frame_count} frames — press Play to animate`);
+      } else {
+        toast("No trajectory data returned", "error");
+      }
+    }
+    if (!res.success) {
+      toast(res.error || "Simulation failed", "error");
+    }
+  } catch (e) {
+    toast("Error: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Simulate & Replay";
+    updateReplayButton();
+  }
+}
+
+// ---- Stress test functions ----
+
+function renderStressTest(data) {
+  const el = document.getElementById("stress-test-display");
+  if (!data) {
+    el.style.display = "none";
+    return;
+  }
+
+  const summary = data.summary;
+  const scorecard = data.scorecard;
+  const terrains = ["flat", "slope", "stairs", "uneven"];
+
+  const summaryColor = scoreColor(summary.average_score);
+  let cardsHtml = terrains.map((t) => {
+    const r = scorecard[t];
+    const icon = r.success ? "&#10003;" : "&#10007;";
+    const cls = r.success ? "metric-ok" : "metric-fail";
+    const score = r.score ? r.score.final_score : "—";
+    const label = r.score ? r.score.label : "N/A";
+    const color = r.score ? scoreColor(r.score.final_score) : "var(--text-muted)";
+    return `
+      <div class="stress-card">
+        <div class="stress-card-header">
+          <span class="stress-terrain">${t}</span>
+          <span class="${cls}">${icon}</span>
+        </div>
+        <span class="stress-score" style="color: ${color}">${score}</span>
+        <span class="stress-label" style="color: ${color}">${label}</span>
+      </div>
+    `;
+  }).join("");
+
+  el.innerHTML = `
+    <div class="stress-summary">
+      <div class="stress-avg">
+        <span class="stress-avg-score" style="color: ${summaryColor}">${summary.average_score}</span>
+        <span class="stress-avg-label" style="color: ${summaryColor}">${summary.label}</span>
+      </div>
+      <div class="stress-meta">
+        ${summary.terrains_passed}/${summary.terrains_total} terrains passed
+        ${summary.motors_enabled ? " (motors on)" : ""}
+      </div>
+    </div>
+    <div class="stress-cards">${cardsHtml}</div>
+  `;
+  el.style.display = "block";
+}
+
+async function doStressTest() {
+  if (!selectedId) {
+    toast("Select a robot from history first", "error");
+    return;
+  }
+
+  const enableMotors = document.getElementById("chk-motors").checked;
+  const btn = document.getElementById("btn-stress-test");
+  btn.disabled = true;
+  btn.textContent = "Testing…";
+
+  try {
+    const res = await API.stressTest(selectedId, enableMotors);
+    if (res.error) {
+      toast(res.error, "error");
+    } else {
+      renderStressTest(res);
+      toast(`Stress test: ${res.summary.terrains_passed}/${res.summary.terrains_total} passed, avg ${res.summary.average_score}`);
+    }
+  } catch (e) {
+    toast("Error: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Stress Test";
+    updateStressTestButton();
+  }
+}
+
 async function init() {
   document.getElementById("btn-generate").addEventListener("click", doGenerate);
   document.getElementById("btn-refine").addEventListener("click", doRefine);
@@ -745,6 +935,42 @@ async function init() {
   document.getElementById("btn-download").addEventListener("click", doDownload);
   document.getElementById("btn-view-source").addEventListener("click", doViewSource);
   document.getElementById("btn-submit-score").addEventListener("click", doSubmitScore);
+  document.getElementById("btn-replay").addEventListener("click", doReplay);
+  document.getElementById("btn-stress-test").addEventListener("click", doStressTest);
+
+  // Replay controls
+  document.getElementById("replay-play").addEventListener("click", () => {
+    if (!replayData) return;
+    replayPlaying = !replayPlaying;
+    document.getElementById("replay-play").textContent = replayPlaying ? "Pause" : "Play";
+    if (replayPlaying) {
+      if (replayFrame >= replayData.frames.length - 1) replayFrame = 0;
+      startReplayAnimation();
+    }
+  });
+  document.getElementById("replay-stop").addEventListener("click", () => {
+    replayPlaying = false;
+    replayFrame = 0;
+    document.getElementById("replay-play").textContent = "Play";
+    document.getElementById("replay-scrubber").value = 0;
+    document.getElementById("replay-time").textContent =
+      replayData ? `0.0s / ${replayData.duration.toFixed(1)}s` : "0.0s / 0.0s";
+    if (replayData && replayData.frames.length > 0) {
+      applyReplayFrame(replayData.frames[0]);
+    }
+  });
+  document.getElementById("replay-scrubber").addEventListener("input", (e) => {
+    if (!replayData) return;
+    const pct = parseInt(e.target.value) / 100;
+    replayFrame = Math.floor(pct * (replayData.frames.length - 1));
+    applyReplayFrame(replayData.frames[replayFrame]);
+    document.getElementById("replay-time").textContent =
+      `${(replayFrame / replayData.fps).toFixed(1)}s / ${replayData.duration.toFixed(1)}s`;
+    if (replayPlaying) {
+      replayStartTime = performance.now() - (replayFrame * (1000 / replayData.fps));
+    }
+  });
+
   document.getElementById("btn-feedback-submit").addEventListener("click", () => {
     const input = document.getElementById("feedback-input");
     doFeedbackRefine(input.value);

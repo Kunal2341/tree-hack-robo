@@ -465,6 +465,143 @@ kbd {
   font-size: 0.85rem;
 }
 
+/* Motor toggle in terrain section */
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.toggle-label input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.btn-sm {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+/* Replay controls */
+.replay-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.replay-scrubber {
+  flex: 1;
+  accent-color: var(--accent);
+  height: 6px;
+  cursor: pointer;
+}
+
+.replay-time {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  min-width: 7rem;
+  text-align: right;
+}
+
+/* Stress test display */
+.stress-test-display {
+  border-top: 1px solid var(--border);
+  padding: 1rem 1.25rem;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.stress-summary {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.stress-avg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stress-avg-score {
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stress-avg-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stress-meta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.stress-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+}
+
+@media (max-width: 700px) {
+  .stress-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.stress-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.stress-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 0.75rem;
+}
+
+.stress-terrain {
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
+.stress-score {
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.stress-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 /* Simulation metrics */
 .sim-metrics {
   border-top: 1px solid var(--border);
