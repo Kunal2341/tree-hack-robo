@@ -30,6 +30,8 @@ const API = {
 
   history: () => fetch("/api/history").then((r) => r.json()),
   robot: (id) => fetch(`/api/robot/${id}`).then((r) => r.json()),
+  deleteRobot: (id) =>
+    fetch(`/api/robot/${id}`, { method: "DELETE" }).then((r) => r.json()),
 };
 
 let selectedId = null;
@@ -88,15 +90,51 @@ function renderHistory(history) {
     .map(
       (e) => `
     <li data-id="${e.id}" class="${e.id === selectedId ? "selected" : ""}">
-      <span class="prompt-text">${escapeHtml(e.prompt)}</span>
-      <span class="meta">${e.refined_from ? "↳ refined" : "new"}</span>
+      <div class="history-row">
+        <div class="history-info">
+          <span class="prompt-text">${escapeHtml(e.prompt)}</span>
+          <span class="meta">${e.refined_from ? "↳ refined" : "new"}</span>
+        </div>
+        <button class="btn-delete" data-id="${e.id}" title="Delete this robot">✕</button>
+      </div>
     </li>
   `
     )
     .join("");
 
   ul.querySelectorAll("li").forEach((li) => {
-    li.addEventListener("click", () => selectRobot(li.dataset.id));
+    li.addEventListener("click", (e) => {
+      // Don't select when clicking the delete button
+      if (e.target.classList.contains("btn-delete")) return;
+      selectRobot(li.dataset.id);
+    });
+  });
+
+  ul.querySelectorAll(".btn-delete").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      try {
+        await API.deleteRobot(id);
+        if (selectedId === id) {
+          selectedId = null;
+          selectedUrdf = null;
+          document.getElementById("preview-placeholder").style.display = "flex";
+          document.getElementById("preview-canvas").style.display = "none";
+          document.getElementById("source-panel").style.display = "none";
+          document.getElementById("preview-prompt").textContent = "";
+          updateRefineButton();
+          updateSimulateButton();
+          updateDownloadButton();
+          updateViewSourceButton();
+        }
+        const { history: h } = await API.history();
+        renderHistory(h);
+        toast("Robot deleted");
+      } catch (err) {
+        toast("Failed to delete: " + err.message, "error");
+      }
+    });
   });
 }
 

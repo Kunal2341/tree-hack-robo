@@ -201,6 +201,18 @@ body {
   border-color: var(--accent);
 }
 
+.history-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.history-info {
+  flex: 1;
+  min-width: 0;
+}
+
 #history-list li .prompt-text {
   color: var(--text);
   display: -webkit-box;
@@ -213,6 +225,24 @@ body {
   font-size: 0.75rem;
   color: var(--text-muted);
   margin-top: 0.25rem;
+  display: block;
+}
+
+.btn-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-delete:hover {
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.15);
 }
 
 /* Preview panel */

@@ -132,6 +132,14 @@ def api_robot(robot_id):
     })
 
 
+@app.route("/api/robot/<robot_id>", methods=["DELETE"])
+def api_robot_delete(robot_id):
+    if robot_id not in _history:
+        return jsonify({"error": "not found"}), 404
+    del _history[robot_id]
+    return jsonify({"success": True})
+
+
 @app.route("/api/simulate", methods=["POST"])
 def api_simulate():
     """Run PyBullet simulation with selected terrain mode."""
