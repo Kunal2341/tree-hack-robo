@@ -79,6 +79,36 @@ def check_effort_limits(urdf_str: str, min_effort: float = 100.0) -> tuple[bool,
     return True, ""
 
 
+def check_mass_values(urdf_str: str, min_mass: float = 0.01, max_mass: float = 500.0) -> tuple[bool, str]:
+    """
+    Validate that all link masses are within physically reasonable bounds.
+    Reject zero/negative masses (PyBullet treats mass=0 as static/immovable)
+    and absurdly heavy links that cause simulation instability.
+    """
+    mass_pattern = re.compile(r'<mass\s+value\s*=\s*["\']([^"\']+)["\']', re.I)
+    for m in mass_pattern.finditer(urdf_str):
+        try:
+            mass = float(m.group(1))
+            if mass <= 0:
+                return False, (
+                    f"Link mass {mass} is non-positive. "
+                    "All movable links need mass > 0 for physics simulation."
+                )
+            if mass < min_mass:
+                return False, (
+                    f"Link mass {mass}kg is unrealistically light (min {min_mass}kg). "
+                    "Increase mass for simulation stability."
+                )
+            if mass > max_mass:
+                return False, (
+                    f"Link mass {mass}kg exceeds maximum ({max_mass}kg). "
+                    "Use realistic masses for a robot."
+                )
+        except ValueError:
+            return False, f"Non-numeric mass value: {m.group(1)}"
+    return True, ""
+
+
 def validate_all(urdf_str: str) -> tuple[bool, str]:
     """Run all validations. Returns (valid, error_msg)."""
     valid, err = validate_urdf_parse(urdf_str)
@@ -90,6 +120,10 @@ def validate_all(urdf_str: str) -> tuple[bool, str]:
         return False, err
 
     valid, err = check_effort_limits(urdf_str)
+    if not valid:
+        return False, err
+
+    valid, err = check_mass_values(urdf_str)
     if not valid:
         return False, err
 
