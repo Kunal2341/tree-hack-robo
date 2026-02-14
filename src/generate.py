@@ -1,5 +1,5 @@
 """
-Phase 1: LLM → URDF generation.
+Phase 1: LLM → URDF generation with RAG-enhanced context.
 Usage: python -m src.generate "A box with 4 wheels"
 """
 
@@ -37,20 +37,33 @@ def extract_urdf_from_response(text: str) -> str:
     return text.strip()
 
 
-def generate_robot(prompt: str, output_path: Path | None = None) -> str:
+def generate_robot(prompt: str, output_path: Path | None = None, use_rag: bool = True) -> str:
     """
     Generate URDF from natural language using OpenAI.
+    When use_rag=True, retrieves relevant URDF snippets to augment the prompt.
     Returns the raw URDF string.
     """
     logger.info("Generating URDF for prompt: %s", prompt[:80])
     client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
     system = load_system_prompt()
 
+    # RAG: retrieve relevant snippets and augment the prompt
+    augmented_prompt = prompt
+    if use_rag:
+        try:
+            from src.rag import build_rag_context
+            rag_context = build_rag_context(prompt, top_k=2)
+            if rag_context:
+                augmented_prompt = f"{rag_context}\n\nUser request: {prompt}"
+                logger.info("RAG: Augmented prompt with retrieved snippets")
+        except Exception as e:
+            logger.warning("RAG retrieval failed (continuing without): %s", e)
+
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": system},
-            {"role": "user", "content": prompt},
+            {"role": "user", "content": augmented_prompt},
         ],
     )
     raw = response.choices[0].message.content
