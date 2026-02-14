@@ -2,6 +2,7 @@
 Web UI for TreeHackNow — prompt input, history, 3D preview, iterative refinement.
 """
 
+import json
 import os
 import time
 import uuid
@@ -18,8 +19,28 @@ from src.simulate import simulate_urdf, TERRAIN_MODES
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
+HISTORY_PATH = Path(__file__).parent.parent / "output" / "history.json"
+
 # In-memory history (id -> {prompt, urdf, refined_from, timestamp})
 _history: dict[str, dict] = {}
+
+
+def _load_history():
+    """Load history from disk on startup."""
+    global _history
+    if HISTORY_PATH.exists():
+        try:
+            data = json.loads(HISTORY_PATH.read_text())
+            _history = {e["id"]: e for e in data}
+        except (json.JSONDecodeError, KeyError):
+            _history = {}
+
+
+def _save_history():
+    """Persist history to disk."""
+    HISTORY_PATH.parent.mkdir(exist_ok=True)
+    entries = sorted(_history.values(), key=lambda e: e.get("timestamp", 0))
+    HISTORY_PATH.write_text(json.dumps(entries, indent=2))
 
 
 def _ensure_api_key():
@@ -52,6 +73,7 @@ def api_generate():
         "refined_from": None,
         "timestamp": time.time(),
     }
+    _save_history()
     return jsonify({
         "success": True,
         "id": entry_id,
@@ -90,6 +112,7 @@ def api_refine():
         "refined_from": base_id,
         "timestamp": time.time(),
     }
+    _save_history()
     return jsonify({
         "success": True,
         "id": entry_id,
@@ -137,6 +160,7 @@ def api_robot_delete(robot_id):
     if robot_id not in _history:
         return jsonify({"error": "not found"}), 404
     del _history[robot_id]
+    _save_history()
     return jsonify({"success": True})
 
 
@@ -173,8 +197,10 @@ def api_simulate():
 
 
 def main():
+    _load_history()
     port = int(os.environ.get("PORT", 5000))
     print(f"TreeHackNow Web UI: http://localhost:{port}")
+    print(f"  History: {len(_history)} robots loaded from {HISTORY_PATH}")
     app.run(host="0.0.0.0", port=port, debug=True)
 
 
