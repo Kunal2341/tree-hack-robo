@@ -77,9 +77,14 @@ TreeHackNow/
 │   ├── generate.py      # LLM → URDF (OpenAI API)
 │   ├── simulate.py      # PyBullet physics (headless or GUI)
 │   └── validate.py      # urdfpy + custom checks
+├── web/
+│   ├── app.py           # Flask server — /api/generate, /api/refine, /api/simulate
+│   ├── templates/       # index.html
+│   └── static/          # app.js, style.css — 3D preview (Three.js + urdf-loader)
 ├── prompts/
 │   └── system_prompt.txt   # LLM system instructions
 ├── output/                  # Generated URDFs (agent_test.urdf, robot.urdf)
+├── package.json         # npm run web — start localhost server
 ├── requirements.txt
 └── environment.yml
 ```
@@ -118,6 +123,19 @@ export OPENAI_API_KEY="your-key-here"
 
 ## Usage
 
+### Web UI (recommended)
+
+```bash
+npm run web
+```
+
+Then open **http://localhost:5000** in your browser. You get:
+- **Generate** — describe a robot (e.g. "A 4-legged dog"), get URDF + 3D preview
+- **Refine** — select a robot, type a change (e.g. "make it heavier"), get updated URDF
+- **Simulate** — run PyBullet physics on flat/uneven/stairs/slope terrain
+
+### CLI
+
 ```bash
 # Generate a robot (simple)
 python -m src.generate "A box with 4 wheels"
@@ -131,9 +149,8 @@ python -m src.simulate output/robot.urdf --terrain uneven   # uneven, stairs, sl
 python -m src.agent "A 4-legged dog robot"
 python -m src.agent "A 4-legged dog" --terrain slope   # optional terrain for sim
 
-# Web UI (prompt input, history, 3D preview, iterative refinement)
-python web/app.py
-# Open http://localhost:5000
+# Web UI (same as above)
+npm run web
 ```
 
 ## Plan

@@ -1,0 +1,9 @@
+{
+  "name": "treehacknow",
+  "version": "1.0.0",
+  "description": "LLM-generated robot URDF — generate, validate, simulate",
+  "scripts": {
+    "web": "python web/app.py",
+    "start": "python web/app.py"
+  }
+}
