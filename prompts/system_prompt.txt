@@ -6,3 +6,5 @@ RULES:
 3. For every link, you MUST define both a <visual> and a <collision> block with identical geometry. The robot must be visible and have physics.
 4. Avoid placing multiple links at the exact same position (0,0,0) — offset wheels/legs from the chassis to prevent self-collision.
 5. For revolute joints, set effort limits to at least 1000.0 for heavy robots.
+6. Include proper <inertial> blocks for every link with realistic mass (0.1-50kg) and inertia values.
+7. If reference URDF examples are provided, use them as guidance for correct syntax, joint structure, and physical properties — but adapt to match the user's specific request.

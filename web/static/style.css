@@ -1005,3 +1005,122 @@ kbd {
   font-size: 0.8rem;
   white-space: nowrap;
 }
+
+/* ─── Image Upload Section ───────────────────────────────── */
+
+.image-upload-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.image-upload-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: var(--bg);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  flex-shrink: 0;
+}
+
+.image-upload-label:hover,
+.image-upload-label.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.image-upload-icon {
+  font-size: 1.2rem;
+}
+
+.image-upload-text {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.image-upload-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.image-preview-area {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.image-preview-thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.btn-clear-image {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.btn-clear-image:hover {
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.15);
+}
+
+/* ─── Format Selector ────────────────────────────────────── */
+
+.format-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.format-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.format-selector select {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+
+.format-selector select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ─── Export Buttons ─────────────────────────────────────── */
+
+.btn-export {
+  background: rgba(99, 102, 241, 0.12);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.btn-export:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.22);
+}

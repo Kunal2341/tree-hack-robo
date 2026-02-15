@@ -10,6 +10,40 @@ const API = {
       body: JSON.stringify({ prompt }),
     }).then((r) => r.json()),
 
+  generateMjcf: (prompt) =>
+    fetch("/api/generate/mjcf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    }).then((r) => r.json()),
+
+  generateSdf: (prompt) =>
+    fetch("/api/generate/sdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    }).then((r) => r.json()),
+
+  convertMjcf: (robotId, urdf) =>
+    fetch("/api/convert/mjcf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ robot_id: robotId, urdf }),
+    }).then((r) => r.json()),
+
+  convertSdf: (robotId, urdf) =>
+    fetch("/api/convert/sdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ robot_id: robotId, urdf }),
+    }).then((r) => r.json()),
+
+  imageToUrdf: (formData) =>
+    fetch("/api/image-to-urdf", {
+      method: "POST",
+      body: formData,
+    }).then((r) => r.json()),
+
   simulate: (robotId, terrainMode, opts = {}) =>
     fetch("/api/simulate", {
       method: "POST",
@@ -58,6 +92,9 @@ const API = {
     }).then((r) => r.json()),
 };
 
+// Track uploaded image file
+let uploadedImageFile = null;
+
 let selectedId = null;
 let selectedUrdf = null;
 let scene = null;
@@ -84,7 +121,7 @@ function setLoading(loading) {
   const btn = document.getElementById("btn-generate");
   const btnRefine = document.getElementById("btn-refine");
   btn.disabled = loading;
-  btn.textContent = loading ? "Generating…" : "Generate";
+  btn.textContent = loading ? "Generating..." : "Generate URDF";
   if (loading) {
     btnRefine.disabled = true;
     document.getElementById("btn-simulate").disabled = true;
@@ -93,6 +130,8 @@ function setLoading(loading) {
     document.getElementById("btn-submit-score").disabled = true;
     document.getElementById("btn-replay").disabled = true;
     document.getElementById("btn-stress-test").disabled = true;
+    document.getElementById("btn-export-mjcf").disabled = true;
+    document.getElementById("btn-export-sdf").disabled = true;
   } else {
     updateRefineButton();
     updateSimulateButton();
@@ -101,6 +140,7 @@ function setLoading(loading) {
     updateSubmitButton();
     updateReplayButton();
     updateStressTestButton();
+    updateExportButtons();
   }
 }
 
@@ -132,6 +172,11 @@ function updateReplayButton() {
 
 function updateStressTestButton() {
   document.getElementById("btn-stress-test").disabled = !selectedId;
+}
+
+function updateExportButtons() {
+  document.getElementById("btn-export-mjcf").disabled = !selectedId;
+  document.getElementById("btn-export-sdf").disabled = !selectedId;
 }
 
 function updateRobotCount(count) {
@@ -188,6 +233,7 @@ function renderHistory(history) {
           updateSubmitButton();
           updateReplayButton();
           updateStressTestButton();
+          updateExportButtons();
         }
         const { history: h } = await API.history();
         renderHistory(h);
@@ -217,6 +263,7 @@ function selectRobot(id) {
   updateSubmitButton();
   updateReplayButton();
   updateStressTestButton();
+  updateExportButtons();
   // Hide panels when switching robots
   document.getElementById("source-panel").style.display = "none";
   document.getElementById("score-display").style.display = "none";
@@ -340,6 +387,13 @@ async function renderUrdf(urdfXml, canvasEl, placeholderEl) {
 
 async function doGenerate() {
   const prompt = document.getElementById("prompt").value.trim();
+  const outputFormat = document.getElementById("output-format").value;
+
+  // Image-to-URDF mode
+  if (uploadedImageFile) {
+    return doImageToUrdf(prompt);
+  }
+
   if (!prompt) {
     toast("Enter a description for your robot", "error");
     return;
@@ -347,12 +401,33 @@ async function doGenerate() {
 
   setLoading(true);
   try {
-    const res = await API.generate(prompt);
+    let res;
+    if (outputFormat === "mjcf") {
+      res = await API.generateMjcf(prompt);
+      if (res.success) {
+        // Download MJCF directly (not saved to history as URDF)
+        downloadText(res.mjcf, `robot-${Date.now()}.xml`, "application/xml");
+        toast("MJCF generated and downloaded!");
+        setLoading(false);
+        return;
+      }
+    } else if (outputFormat === "sdf") {
+      res = await API.generateSdf(prompt);
+      if (res.success) {
+        downloadText(res.sdf, `robot-${Date.now()}.sdf`, "application/xml");
+        toast("SDF generated and downloaded!");
+        setLoading(false);
+        return;
+      }
+    } else {
+      res = await API.generate(prompt);
+    }
+
     if (res.success) {
       toast("Robot generated!");
       const hist = await API.history();
       renderHistory(hist.history);
-      selectRobot(res.id);
+      if (res.id) selectRobot(res.id);
       document.getElementById("prompt").value = "";
     } else {
       toast(res.error || "Generation failed", "error");
@@ -362,6 +437,138 @@ async function doGenerate() {
   } finally {
     setLoading(false);
   }
+}
+
+async function doImageToUrdf(additionalPrompt) {
+  if (!uploadedImageFile) {
+    toast("No image uploaded", "error");
+    return;
+  }
+
+  setLoading(true);
+  const btn = document.getElementById("btn-generate");
+  btn.textContent = "Analyzing image...";
+
+  try {
+    const formData = new FormData();
+    formData.append("image", uploadedImageFile);
+    formData.append("additional_prompt", additionalPrompt || "");
+    formData.append("mode", "two_stage");
+
+    const res = await API.imageToUrdf(formData);
+
+    if (res.success) {
+      toast("Robot generated from image!");
+      const hist = await API.history();
+      renderHistory(hist.history);
+      if (res.id) selectRobot(res.id);
+      document.getElementById("prompt").value = "";
+      clearImageUpload();
+
+      // Show description if available
+      if (res.description) {
+        console.log("Vision analysis:", res.description);
+      }
+    } else {
+      toast(res.error || "Image-to-URDF failed", "error");
+    }
+  } catch (e) {
+    toast("Error: " + e.message, "error");
+  } finally {
+    setLoading(false);
+  }
+}
+
+function downloadText(content, filename, mimeType = "text/plain") {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function doExportMjcf() {
+  if (!selectedId && !selectedUrdf) {
+    toast("Select a robot first", "error");
+    return;
+  }
+
+  const btn = document.getElementById("btn-export-mjcf");
+  btn.disabled = true;
+  btn.textContent = "Converting...";
+
+  try {
+    const res = await API.convertMjcf(selectedId, selectedUrdf);
+    if (res.success) {
+      downloadText(res.mjcf, `robot-${selectedId ? selectedId.slice(0, 8) : "export"}.xml`, "application/xml");
+      toast("MJCF exported!");
+    } else {
+      toast(res.error || "Conversion failed", "error");
+    }
+  } catch (e) {
+    toast("Error: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Export MJCF";
+    updateExportButtons();
+  }
+}
+
+async function doExportSdf() {
+  if (!selectedId && !selectedUrdf) {
+    toast("Select a robot first", "error");
+    return;
+  }
+
+  const btn = document.getElementById("btn-export-sdf");
+  btn.disabled = true;
+  btn.textContent = "Converting...";
+
+  try {
+    const res = await API.convertSdf(selectedId, selectedUrdf);
+    if (res.success) {
+      downloadText(res.sdf, `robot-${selectedId ? selectedId.slice(0, 8) : "export"}.sdf`, "application/xml");
+      toast("SDF exported!");
+    } else {
+      toast(res.error || "Conversion failed", "error");
+    }
+  } catch (e) {
+    toast("Error: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Export SDF";
+    updateExportButtons();
+  }
+}
+
+function clearImageUpload() {
+  uploadedImageFile = null;
+  document.getElementById("image-upload").value = "";
+  document.getElementById("image-preview-area").style.display = "none";
+  document.getElementById("image-preview-thumb").src = "";
+  const btn = document.getElementById("btn-generate");
+  btn.textContent = "Generate URDF";
+}
+
+function handleImageUpload(file) {
+  if (!file) return;
+  uploadedImageFile = file;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const thumb = document.getElementById("image-preview-thumb");
+    thumb.src = e.target.result;
+    document.getElementById("image-preview-area").style.display = "flex";
+  };
+  reader.readAsDataURL(file);
+
+  // Update generate button text
+  const btn = document.getElementById("btn-generate");
+  btn.textContent = "Generate from Image";
 }
 
 async function doSimulate() {
@@ -937,6 +1144,42 @@ async function init() {
   document.getElementById("btn-submit-score").addEventListener("click", doSubmitScore);
   document.getElementById("btn-replay").addEventListener("click", doReplay);
   document.getElementById("btn-stress-test").addEventListener("click", doStressTest);
+  document.getElementById("btn-export-mjcf").addEventListener("click", doExportMjcf);
+  document.getElementById("btn-export-sdf").addEventListener("click", doExportSdf);
+
+  // Image upload
+  document.getElementById("image-upload").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) handleImageUpload(file);
+  });
+  document.getElementById("btn-clear-image").addEventListener("click", clearImageUpload);
+
+  // Drag and drop on the image upload label
+  const uploadLabel = document.querySelector(".image-upload-label");
+  uploadLabel.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    uploadLabel.classList.add("drag-over");
+  });
+  uploadLabel.addEventListener("dragleave", () => {
+    uploadLabel.classList.remove("drag-over");
+  });
+  uploadLabel.addEventListener("drop", (e) => {
+    e.preventDefault();
+    uploadLabel.classList.remove("drag-over");
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith("image/")) {
+      handleImageUpload(file);
+    }
+  });
+
+  // Output format selector updates button text
+  document.getElementById("output-format").addEventListener("change", (e) => {
+    const btn = document.getElementById("btn-generate");
+    const format = e.target.value.toUpperCase();
+    if (!uploadedImageFile) {
+      btn.textContent = `Generate ${format}`;
+    }
+  });
 
   // Replay controls
   document.getElementById("replay-play").addEventListener("click", () => {

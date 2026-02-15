@@ -13,7 +13,7 @@
   <div class="app">
     <header class="header">
       <h1>TreeHackNow</h1>
-      <p class="tagline">Generate robot URDFs from natural language</p>
+      <p class="tagline">Generate robot URDF / MJCF / SDF from natural language or images</p>
     </header>
 
     <main class="main">
@@ -22,11 +22,33 @@
           <label for="prompt">Describe your robot</label>
           <textarea id="prompt" rows="2" placeholder="e.g. A 4-legged dog robot, or A box with 4 wheels"></textarea>
         </div>
+        <!-- Image upload area -->
+        <div class="image-upload-section">
+          <label class="image-upload-label" for="image-upload" title="Upload a robot sketch, diagram, or photo">
+            <span class="image-upload-icon">&#128247;</span>
+            <span class="image-upload-text">Upload robot image</span>
+            <span class="image-upload-hint">Sketch, diagram, or photo</span>
+          </label>
+          <input type="file" id="image-upload" accept="image/*" style="display: none;">
+          <div id="image-preview-area" class="image-preview-area" style="display: none;">
+            <img id="image-preview-thumb" class="image-preview-thumb" alt="Preview">
+            <button id="btn-clear-image" class="btn-clear-image" title="Remove image">&#10005;</button>
+          </div>
+        </div>
+
         <div class="actions">
-          <button id="btn-generate" class="btn btn-primary">Generate</button>
+          <button id="btn-generate" class="btn btn-primary">Generate URDF</button>
           <button id="btn-refine" class="btn btn-secondary" disabled title="Refine the selected robot">
             Refine selected
           </button>
+          <div class="format-selector">
+            <label class="format-label">Format:</label>
+            <select id="output-format" title="Output format for direct generation">
+              <option value="urdf">URDF</option>
+              <option value="mjcf">MJCF (MuJoCo)</option>
+              <option value="sdf">SDF (Gazebo)</option>
+            </select>
+          </div>
         </div>
         <div class="examples">
           <span class="examples-label">Try:</span>
@@ -98,6 +120,12 @@
             </button>
             <button id="btn-download" class="btn btn-tertiary" disabled title="Download selected robot as .urdf file">
               Download URDF
+            </button>
+            <button id="btn-export-mjcf" class="btn btn-tertiary btn-export" disabled title="Convert and download as MJCF (MuJoCo)">
+              Export MJCF
+            </button>
+            <button id="btn-export-sdf" class="btn btn-tertiary btn-export" disabled title="Convert and download as SDF (Gazebo)">
+              Export SDF
             </button>
             <button id="btn-view-source" class="btn btn-tertiary" disabled title="Show/hide raw URDF XML">
               View Source
