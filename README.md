@@ -1,4 +1,4 @@
-# TreeHackNow — LLM-Generated Robot URDF
+# RoboWhisper — LLM-Generated Robot URDF
 
 Generate robot URDF files from natural language using an LLM, validate with urdfpy, and simulate in PyBullet.
 
@@ -8,9 +8,11 @@ Generate robot URDF files from natural language using an LLM, validate with urdf
 
 ### High-Level Overview
 
+![RoboWhisper Pipeline](docs/images/pipeline.png)
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              TreeHackNow Pipeline                                │
+│                              RoboWhisper Pipeline                                │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
   User Prompt                    ┌──────────────┐
@@ -71,7 +73,7 @@ Natural Language ──► LLM (GPT-4o-mini) ──► URDF XML ──► Valida
 ### File Structure
 
 ```
-TreeHackNow/
+RoboWhisper/
 ├── src/
 │   ├── agent.py         # Orchestrator: retry loop + error feedback
 │   ├── generate.py      # LLM → URDF (OpenAI API)
@@ -105,7 +107,7 @@ TreeHackNow/
 
 ```bash
 conda env create -f environment.yml
-conda activate treehacknow
+conda activate robowhisper
 ```
 
 **Or pip only:**

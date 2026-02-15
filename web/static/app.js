@@ -1,5 +1,5 @@
 /**
- * TreeHackNow Web UI — generate, refine, preview robots
+ * RoboWhisper Web UI — generate, refine, preview robots
  */
 
 const API = {
@@ -569,6 +569,19 @@ function handleImageUpload(file) {
   // Update generate button text
   const btn = document.getElementById("btn-generate");
   btn.textContent = "Generate from Image";
+}
+
+async function loadExampleSketch() {
+  try {
+    const res = await fetch("/static/examples/quadruped-sketch.png");
+    if (!res.ok) throw new Error("Failed to load example");
+    const blob = await res.blob();
+    const file = new File([blob], "quadruped-sketch.png", { type: "image/png" });
+    handleImageUpload(file);
+    toast("Example sketch loaded — click Generate from Image");
+  } catch (e) {
+    toast("Could not load example", "error");
+  }
 }
 
 async function doSimulate() {
@@ -1153,6 +1166,7 @@ async function init() {
     if (file) handleImageUpload(file);
   });
   document.getElementById("btn-clear-image").addEventListener("click", clearImageUpload);
+  document.getElementById("btn-try-example").addEventListener("click", loadExampleSketch);
 
   // Drag and drop on the image upload label
   const uploadLabel = document.querySelector(".image-upload-label");
